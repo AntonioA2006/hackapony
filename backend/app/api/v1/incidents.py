@@ -77,9 +77,71 @@ def public_incidents(
             min_lon, min_lat, max_lon, max_lat = parse_bbox(bbox)
         except BBoxError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    # Un reporte entra al mapa en cuanto se envía. Solo se oculta si fue rechazado
-    # o si la incidencia ya se cerró. awaiting_validation avisa que ningún reporte
-    # vinculado pasó por validación de un administrador.
+    # El mapa público es para quien no administra: solo incidencias con un reporte
+    # validado. Las recién enviadas no salen aquí.
+    validated_incident_ids = (
+        select(Report.incident_id)
+        .where(
+            Report.incident_id.isnot(None),
+            Report.status == ReportStatus.validated,
+        )
+        .distinct()
+    )
+    q = select(Incident).where(
+        Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
+        Incident.id.in_(validated_incident_ids),
+    )
+    if cve_ent or cvegeo:
+        q = q.join(Municipality, Municipality.id == Incident.municipality_id)
+        if cvegeo:
+            q = q.where(Municipality.cvegeo == cvegeo)
+        if cve_ent:
+            q = q.where(Municipality.cve_ent == cve_ent.zfill(2))
+    if bbox:
+        # && sobre geography usa el índice GiST de public_location. Filtrar el
+        # centroide permitiría acorralar el punto real encogiendo el rectángulo.
+        q = q.where(_bbox_on("incidents.public_location", (min_lon, min_lat, max_lon, max_lat)))
+    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+    pub_lat = func.ST_Y(cast(Incident.public_location, Geometry)).label("pub_lat")
+    pub_lon = func.ST_X(cast(Incident.public_location, Geometry)).label("pub_lon")
+    rows = db.execute(
+        q.add_columns(pub_lat, pub_lon)
+        .order_by(Incident.urgency_score.desc(), Incident.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    response.headers["Cache-Control"] = "public, max-age=30"
+    return PaginatedResponse(
+        items=[_public_out(inc, lat, lon) for inc, lat, lon in rows],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def _bbox_on(column_sql: str, box: tuple[float, float, float, float]):
+    min_lon, min_lat, max_lon, max_lat = box
+    return text(
+        f"{column_sql} && ST_MakeEnvelope(:bb_xmin, :bb_ymin, :bb_xmax, :bb_ymax, 4326)::geography"
+    ).bindparams(bb_xmin=min_lon, bb_ymin=min_lat, bb_xmax=max_lon, bb_ymax=max_lat)
+
+
+@router.get("/map", response_model=PaginatedResponse[PublicIncidentOut])
+def admin_map_incidents(
+    page: int = 1,
+    page_size: int = PUBLIC_PAGE_SIZE_DEFAULT,
+    bbox: str | None = Query(None, max_length=200, description="minLon,minLat,maxLon,maxLat"),
+    user=Depends(require_roles(UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)),
+    db: Session = Depends(get_db),
+):
+    """Todas las incidencias abiertas del viewport, también las que nadie ha validado."""
+    page, page_size = clamp_public_page(page, page_size)
+    box = None
+    if bbox:
+        try:
+            box = parse_bbox(bbox)
+        except BBoxError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     publishable_incident_ids = (
         select(Report.incident_id)
         .where(
@@ -98,31 +160,17 @@ def public_incidents(
         Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
         Incident.id.in_(publishable_incident_ids),
     )
-    if cve_ent or cvegeo:
-        q = q.join(Municipality, Municipality.id == Incident.municipality_id)
-        if cvegeo:
-            q = q.where(Municipality.cvegeo == cvegeo)
-        if cve_ent:
-            q = q.where(Municipality.cve_ent == cve_ent.zfill(2))
-    if bbox:
-        # && sobre geography usa el índice GiST de public_location. Filtrar el
-        # centroide permitiría acorralar el punto real encogiendo el rectángulo.
-        q = q.where(
-            text(
-                "incidents.public_location && "
-                "ST_MakeEnvelope(:bb_xmin, :bb_ymin, :bb_xmax, :bb_ymax, 4326)::geography"
-            ).bindparams(bb_xmin=min_lon, bb_ymin=min_lat, bb_xmax=max_lon, bb_ymax=max_lat)
-        )
+    if box:
+        q = q.where(_bbox_on("incidents.centroid", box))
     total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
-    pub_lat = func.ST_Y(cast(Incident.public_location, Geometry)).label("pub_lat")
-    pub_lon = func.ST_X(cast(Incident.public_location, Geometry)).label("pub_lon")
+    lat_c = func.ST_Y(cast(Incident.centroid, Geometry)).label("lat")
+    lon_c = func.ST_X(cast(Incident.centroid, Geometry)).label("lon")
     rows = db.execute(
-        q.add_columns(pub_lat, pub_lon, has_validated.label("has_validated"))
+        q.add_columns(lat_c, lon_c, has_validated.label("has_validated"))
         .order_by(Incident.urgency_score.desc(), Incident.id)
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
-    response.headers["Cache-Control"] = "public, max-age=30"
     return PaginatedResponse(
         items=[_public_out(inc, lat, lon, awaiting_validation=not validated) for inc, lat, lon, validated in rows],
         page=page,

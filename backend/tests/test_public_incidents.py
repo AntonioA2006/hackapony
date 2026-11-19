@@ -61,13 +61,16 @@ def _bbox_around(lat: float, lon: float, pad: float = 0.02) -> str:
 
 
 def test_rejected_report_leaves_the_public_map(client):
-    lat, lon = 19.5, -99.2
+    lat, lon = 16.72, -93.11
     _, citizen = _make_user()
     _, admin = _make_user(UserRole.ADMINISTRADOR)
     created = client.post("/api/v1/reports", headers=_auth(citizen), json=_report_payload(lat, lon))
     assert created.status_code == 201, created.text
     incident_id = created.json()["incident_id"]
-    visible = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
+    public = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
+    assert all(item["id"] != incident_id for item in public.json()["items"])
+    visible = client.get("/api/v1/incidents/map", headers=_auth(admin), params={"bbox": _bbox_around(lat, lon)})
+    assert visible.status_code == 200, visible.text
     assert any(item["id"] == incident_id for item in visible.json()["items"])
     rejected = client.patch(
         f"/api/v1/reports/{created.json()['id']}",
@@ -77,6 +80,9 @@ def test_rejected_report_leaves_the_public_map(client):
     assert rejected.status_code == 200, rejected.text
     after = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
     assert all(item["id"] != incident_id for item in after.json()["items"])
+    admin_after = client.get("/api/v1/incidents/map", headers=_auth(admin), params={"bbox": _bbox_around(lat, lon)})
+    assert admin_after.status_code == 200, admin_after.text
+    assert all(item["id"] != incident_id for item in admin_after.json()["items"])
 
 
 def test_invalid_bbox_is_422(client):
@@ -108,8 +114,15 @@ def test_public_map_hides_exact_point_and_filters_by_published_bbox(client):
 
     listed_early = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
     assert listed_early.status_code == 200, listed_early.text
-    early = next(item for item in listed_early.json()["items"] if item["id"] == incident_id)
+    assert all(item["id"] != incident_id for item in listed_early.json()["items"])
+    as_citizen = client.get("/api/v1/incidents/map", headers=_auth(citizen), params={"bbox": _bbox_around(lat, lon)})
+    assert as_citizen.status_code == 403, as_citizen.text
+    as_admin = client.get("/api/v1/incidents/map", headers=_auth(admin), params={"bbox": _bbox_around(lat, lon)})
+    assert as_admin.status_code == 200, as_admin.text
+    early = next(item for item in as_admin.json()["items"] if item["id"] == incident_id)
     assert early["awaiting_validation"] is True
+    assert early["latitude"] == pytest.approx(report["latitude"], abs=1e-5)
+    assert early["longitude"] == pytest.approx(report["longitude"], abs=1e-5)
 
     validated = client.patch(
         f"/api/v1/reports/{report['id']}",
