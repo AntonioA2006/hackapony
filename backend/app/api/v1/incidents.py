@@ -112,16 +112,15 @@ def public_incidents(
             min_lon, min_lat, max_lon, max_lat = parse_bbox(bbox)
         except BBoxError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    # Un reporte entra al mapa en cuanto se envía (marcado como sin validar). Se oculta si todos sus
-    # reportes fueron rechazados o si la incidencia ya se cerró.
-    publishable_ids = (
+    # Quien no es personal solo ve incidencias con un reporte validado.
+    validated_ids = (
         select(Report.incident_id)
-        .where(Report.incident_id.isnot(None), Report.status != ReportStatus.rejected)
+        .where(Report.incident_id.isnot(None), Report.status == ReportStatus.validated)
         .distinct()
     )
     q = select(Incident).where(
         Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
-        Incident.id.in_(publishable_ids),
+        Incident.id.in_(validated_ids),
     )
     if cve_ent or cvegeo:
         q = q.join(Municipality, Municipality.id == Incident.municipality_id)
@@ -146,6 +145,53 @@ def public_incidents(
     ex = _extras(db, list(items_db))
     return PaginatedResponse(
         items=[_public(i, ex[i.id]) for i in items_db],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def _bbox_on(column_sql: str, box: tuple[float, float, float, float]):
+    min_lon, min_lat, max_lon, max_lat = box
+    return text(
+        f"{column_sql} && ST_MakeEnvelope(:bb_xmin, :bb_ymin, :bb_xmax, :bb_ymax, 4326)::geography"
+    ).bindparams(bb_xmin=min_lon, bb_ymin=min_lat, bb_xmax=max_lon, bb_ymax=max_lat)
+
+
+@router.get("/map", response_model=PaginatedResponse[PublicIncidentOut])
+def staff_map_incidents(
+    page: int = 1,
+    page_size: int = PUBLIC_PAGE_SIZE_DEFAULT,
+    bbox: str | None = Query(None, max_length=200, description="minLon,minLat,maxLon,maxLat"),
+    user=Depends(require_roles(*STAFF_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Personal: todas las incidencias abiertas del viewport, también las sin validar, en el punto real."""
+    page, page_size = clamp_public_page(page, page_size)
+    box = None
+    if bbox:
+        try:
+            box = parse_bbox(bbox)
+        except BBoxError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    publishable_ids = (
+        select(Report.incident_id)
+        .where(Report.incident_id.isnot(None), Report.status != ReportStatus.rejected)
+        .distinct()
+    )
+    q = select(Incident).where(
+        Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
+        Incident.id.in_(publishable_ids),
+    )
+    if box:
+        q = q.where(_bbox_on("incidents.centroid", box))
+    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+    items_db = db.scalars(
+        q.order_by(Incident.urgency_score.desc(), Incident.id).offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    ex = _extras(db, list(items_db))
+    return PaginatedResponse(
+        items=[_public(i, ex[i.id], exact=True) for i in items_db],
         page=page,
         page_size=page_size,
         total=total,

@@ -113,13 +113,14 @@ export default function MapPage() {
     : null;
   const queryBbox = focusBbox ?? bbox;
   const incidents = useQuery({
-    queryKey: ["public-incidents", queryBbox],
+    queryKey: ["map-incidents", staff ? "staff" : "public", queryBbox],
     enabled: typeof queryBbox === "string",
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ bbox: queryBbox as string, page_size: "200" });
-      return apiFetch<Paginated<MapIncident>>(`/incidents/public?${params}`, { signal });
+      const path = staff ? "/incidents/map" : "/incidents/public";
+      return apiFetch<Paginated<MapIncident>>(`${path}?${params}`, { signal });
     },
   });
 
@@ -127,7 +128,7 @@ export default function MapPage() {
     mutationFn: (id: string) => apiFetch(`/incidents/${id}/confirm`, { method: "POST" }),
     onSuccess: () => {
       setNotice({ tone: "success", text: "Gracias: tu confirmación ayuda a priorizar la atención." });
-      void qc.invalidateQueries({ queryKey: ["public-incidents"] });
+      void qc.invalidateQueries({ queryKey: ["map-incidents"] });
     },
     onError: (e) => setNotice({ tone: "error", text: (e as Error).message }),
   });
@@ -235,8 +236,9 @@ export default function MapPage() {
           />
           <p className="text-[12px] text-warm">
             {region.cve_ent ? "Toca un municipio para enfocarlo." : "Toca un estado para ver sus municipios."}{" "}
-            Los reportes aparecen en cuanto se envían; los de borde punteado aún no los valida el personal. La ubicación
-            pública está aproximada (~30 m) para no mostrar el punto exacto del reporte.
+            {staff
+              ? "Ves todas las incidencias abiertas, también las que aún no se validan, en su ubicación real."
+              : "La ubicación en el mapa está aproximada (~30 m) para no mostrar el punto exacto del reporte."}
             {incidents.isFetching ? " Actualizando esta vista…" : ""}
           </p>
           {incidents.data && incidents.data.total > list.length && (
@@ -253,7 +255,7 @@ export default function MapPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-subheading">En esta vista</h2>
+          <h2 className="text-subheading">{staff ? "Todas las incidencias" : "En esta vista"}</h2>
           <Tag>{fmtInt(incidents.data?.total ?? 0)}</Tag>
         </div>
         {waiting ? (
@@ -262,7 +264,7 @@ export default function MapPage() {
           </p>
         ) : list.length === 0 ? (
           <p className="rounded-card border border-dashed border-muted bg-card px-4 py-6 text-center text-warm">
-            No hay reportes en esta vista por ahora.
+            No hay incidencias en esta vista por ahora.
           </p>
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-card">

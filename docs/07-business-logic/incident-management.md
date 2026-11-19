@@ -46,4 +46,4 @@ Todo cambio de estado en `incident_history` con `actor_user_id`, `payload`.
 
 ## Mapa público
 
-El mapa público muestra la incidencia en cuanto tiene un reporte que no está `rejected`, con `awaiting_validation` si ninguno está `validated`. Un rechazo quita el punto si no queda otro reporte vigente.
+El mapa público muestra solo incidencias con un reporte `validated`. El administrador, en el mismo mapa, ve también las que siguen en `received` o `under_review`. Un rechazo quita el punto si no queda otro reporte vigente.
