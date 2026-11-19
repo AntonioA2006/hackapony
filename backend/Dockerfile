@@ -18,6 +18,7 @@ RUN mkdir -p /data/photos
 
 EXPOSE 8000
 
-# Migraciones + servidor. En hosting gratuito (una sola instancia, sin pre-deploy) es aceptable migrar al arrancar;
-# con varias réplicas, mover `alembic upgrade head` a un job de despliegue (arquitectura §3, H7).
-CMD ["sh", "-c", "alembic upgrade head && python -m scripts.load_inegi_seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]
+# La API no migra ni carga el paquete INEGI al arrancar.
+# En Compose lo hace el servicio `migrate`: `alembic upgrade head && python -m scripts.load_inegi_seed`.
+# En un hosting de un solo contenedor, ese mismo comando es el release y este CMD es el start.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]

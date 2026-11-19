@@ -55,7 +55,7 @@ frontend/
 
 ## Mapa
 
-- Base OSM: `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` (política de atribución OSM).
+- Base: `VITE_MAP_TILE_URL` / `VITE_MAP_TILE_ATTRIBUTION` (alias `VITE_TILE_*`). Si van vacías: Esri World Light Gray. El crédito de INEGI se añade siempre.
 - Capas: incidencias (markers/cluster), pin de reporte en edición.
 
 Especificación UX: [../08-frontend/map-specification.md](../08-frontend/map-specification.md).
