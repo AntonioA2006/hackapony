@@ -2,21 +2,9 @@
 
 Plataforma para reportar fugas de agua, seguir el folio y cerrar el caso con evidencia.
 
+**Página:** [https://agua-alerta-mx.web.app/](https://agua-alerta-mx.web.app/)
+
 Quien reporta ve el estado. Un operador valida. Una cuadrilla repara y explica. El operador confirma y las fotos se borran.
-
-![Inicio de Agua Alerta](docs/readme/inicio.png)
-
-## Cómo se ve
-
-| Inicio | Sobre nosotros | Aviso legal | Teléfono |
-| --- | --- | --- | --- |
-| Mapa, indicadores y el acceso al reporte | Misión, visión y valores | Términos y privacidad, en su propia página | Menú en el celular |
-
-![Sobre nosotros](docs/readme/nosotros.png)
-
-![Aviso legal](docs/readme/legal.png)
-
-![Vista en el celular](docs/readme/movil.png)
 
 ## Quién entra y qué hace
 
