@@ -64,12 +64,39 @@
   .hint {
     @apply mt-1 text-[12px] text-warm;
   }
+
+  /* Trama de curvas de nivel. Solo fondo: no cubre el mapa ni sus controles. */
+  .bg-topographic-water {
+    background-color: #f1f5f9;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(14, 165, 233, 0.1), transparent),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none'%3E%3Cpath d='M-12 36c46 20 78-14 128 6s62 26 136-8' stroke='%2394a3b8' stroke-opacity='0.16' stroke-width='1'/%3E%3Cpath d='M-12 68c52 18 84-20 132 4s58 24 132-12' stroke='%23cbd5e1' stroke-opacity='0.18' stroke-width='1'/%3E%3Cpath d='M-20 112c58-28 96 22 148-6s64-18 128 14' stroke='%2394a3b8' stroke-opacity='0.14' stroke-width='1'/%3E%3Cpath d='M8 168c42 12 74-22 116-4s48 18 108-10' stroke='%2394a3b8' stroke-opacity='0.12' stroke-width='1'/%3E%3Cpath d='M18 210c28-46 62-18 96-58' stroke='%2394a3b8' stroke-opacity='0.18' stroke-width='1.15'/%3E%3C/svg%3E");
+    background-repeat: no-repeat, repeat;
+    background-size: 100% 520px, 240px 240px;
+  }
+
+  .nav-glass {
+    background: rgba(248, 250, 252, 0.82);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  }
+
+  .surface-elevated {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08);
+  }
 }
 
 /* Leaflet con la tipografía y los tonos del sistema */
 .leaflet-container {
   font-family: inherit;
   background: #eef3f8;
+}
+.surface-elevated .leaflet-container {
+  background: #ffffff;
 }
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {

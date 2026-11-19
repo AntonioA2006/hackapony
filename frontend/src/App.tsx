@@ -125,11 +125,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className={`flex min-h-screen flex-col ${location.pathname === "/" ? "bg-topographic-water" : ""}`}>
       <a href="#contenido" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[1300] focus:rounded-full focus:bg-card focus:px-3 focus:py-2">
         Saltar al contenido
       </a>
-      <header className="sticky top-0 z-[1000] border-b border-line/80 bg-canvas/80 backdrop-blur-md">
+      <header className="nav-glass sticky top-0 z-[1000]">
         <nav className="mx-auto flex h-14 max-w-page items-center gap-2 px-4 sm:px-6" aria-label="Principal">
           <Logo />
           <div className="ml-4 hidden items-center lg:flex">{links}</div>
