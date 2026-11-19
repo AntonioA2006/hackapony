@@ -68,7 +68,8 @@ const navLink = ({ isActive }: { isActive: boolean }) =>
   `flex h-9 items-center rounded-full px-3 text-body transition-colors ${isActive ? "bg-sky font-medium text-ink" : "text-warm hover:bg-card hover:text-ink"}`;
 
 const textLink = "flex h-9 items-center rounded-full px-3 text-body text-warm transition-colors hover:bg-card hover:text-ink";
-const menuItem = "flex min-h-11 w-full items-center gap-3 rounded-card px-3 text-left text-body text-ink hover:bg-sky";
+const menuItem =
+  "flex min-h-11 w-full items-center gap-3 rounded-card px-3 text-left text-body text-ink transition-all duration-300 ease-out hover:translate-x-1 hover:bg-sky hover:text-cyan-edge";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -187,11 +188,21 @@ function Shell({ children }: { children: React.ReactNode }) {
             aria-label={open ? "Cerrar menú" : "Abrir menú"}
             onClick={() => setOpen((v) => !v)}
           >
-            <i className={`fa-solid ${open ? "fa-xmark" : "fa-bars"} text-[18px]`} aria-hidden />
+            <span className="relative grid h-5 w-5 place-items-center" aria-hidden>
+              <i className={`fa-solid fa-bars absolute text-[18px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? "rotate-90 scale-75 opacity-0" : "opacity-100"}`} />
+              <i className={`fa-solid fa-xmark absolute text-[18px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? "opacity-100" : "-rotate-90 scale-75 opacity-0"}`} />
+            </span>
           </button>
         </nav>
-        {open && (
-          <div id="menu-movil" className="border-t border-line bg-canvas px-4 pb-4 pt-3 lg:hidden">
+        <div
+          id="menu-movil"
+          inert={!open}
+          className={`grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:hidden ${
+            open ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"
+          }`}
+        >
+          <div className="overflow-hidden border-t border-line bg-canvas">
+            <div className={`px-4 pb-4 pt-3 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? "translate-y-0" : "-translate-y-2"}`}>
             <p className="mb-2 text-[12px] font-medium uppercase tracking-[0.04em] text-warm">
               {view === "operador" ? "Operador" : view === "cuadrilla" ? "Cuadrilla" : user ? "Ciudadano" : "Menú"}
             </p>
@@ -256,8 +267,9 @@ function Shell({ children }: { children: React.ReactNode }) {
                 </>
               )}
             </div>
+            </div>
           </div>
-        )}
+        </div>
       </header>
       <main id="contenido" key={location.pathname} className="anim-page mx-auto w-full max-w-page flex-1 px-4 pb-28 pt-8 sm:px-6 sm:pt-10">
         {children}
