@@ -11,7 +11,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { apiFetch, clearTokens, getToken, setTokenProvider, setTokens, type Tokens } from "../api/client";
+import { apiFetch, clearTokens, getRefreshToken, getToken, setTokenProvider, setTokens, type Tokens } from "../api/client";
 import { firebaseAuth, firebaseEnabled } from "../firebase";
 
 export type User = { id: string; email: string; display_name: string; role: string };
@@ -111,7 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (firebaseEnabled) {
       await signOut(firebaseAuth());
     } else {
-      void apiFetch("/auth/logout", { method: "POST" }).catch(() => undefined);
+      const refresh_token = getRefreshToken();
+      try {
+        await apiFetch("/auth/logout", { method: "POST", body: JSON.stringify({ refresh_token }) });
+      } catch {
+        // cerrar sesión local aunque falle la red
+      }
       clearTokens();
     }
     setUser(null);

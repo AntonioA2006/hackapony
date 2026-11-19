@@ -43,9 +43,15 @@
 
 Público. Request: `email`, `password`. Response igual tokens.
 
+## POST `/auth/refresh`
+
+Público. Body opcional `{ "refresh_token": "..." }` o cookie HttpOnly `agua_refresh` (mismo origen vía nginx).
+
+Respuesta: `{ "access_token", "refresh_token", "token_type", "expires_in" }` con **rotación** (el refresh anterior queda revocado).
+
 ## POST `/auth/logout`
 
-Autenticado. Invalida refresh (lista denegados en DB o rotación). **204**.
+Público. Body opcional `{ "refresh_token": "..." }` o cookie. Revoca el refresh y borra la cookie. **204**.
 
 ## POST `/auth/password-reset/request` (MVP opcional)
 
