@@ -57,16 +57,21 @@ def test_citizen_cannot_use_staff_endpoints(client):
         assert client.get(path, headers=cit).status_code == 403, path
 
 
-def test_public_map_shows_unvalidated_incident_flagged(client):
+def test_public_map_hides_unvalidated_from_citizens(client):
     _, cit = _user(UserRole.CIUDADANO)
+    _, tech = _user(UserRole.TECNICO)
     rep = _report(client, cit)
     lat, lon = rep["latitude"], rep["longitude"]
     bbox = f"{lon - 0.02},{lat - 0.02},{lon + 0.02},{lat + 0.02}"
-    items = client.get("/api/v1/incidents/public", params={"bbox": bbox}).json()["items"]
-    mine = next(i for i in items if i["id"] == rep["incident_id"])
+    public = client.get("/api/v1/incidents/public", params={"bbox": bbox}).json()["items"]
+    assert all(i["id"] != rep["incident_id"] for i in public)
+    assert client.get("/api/v1/incidents/map", headers=cit, params={"bbox": bbox}).status_code == 403
+    staff = client.get("/api/v1/incidents/map", headers=tech, params={"bbox": bbox})
+    assert staff.status_code == 200, staff.text
+    mine = next(i for i in staff.json()["items"] if i["id"] == rep["incident_id"])
     assert mine["validated"] is False and mine["awaiting_validation"] is True
     assert mine["leak_flow"] == "chorro"
-    assert mine["state_name"]  # región resuelta con INEGI
+    assert mine["latitude"] == pytest.approx(lat, abs=1e-5)
 
 
 def test_operator_validates_and_dispatches_crew_closes(client):

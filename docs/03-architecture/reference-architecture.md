@@ -299,7 +299,7 @@ El mapa público es el endpoint más consultado y el más expuesto. Se separa de
 
 Se muestra una incidencia en cuanto tiene **≥ 1 reporte en `under_review` o `validated`**, con badge "sin validar" si ninguno está validado. Las incidencias con un único reporte de una cuenta de menos de 24 h **no** se publican hasta validación. Equilibra utilidad (la gente ve que su reporte "existe") contra abuso (cuentas recién creadas sembrando el mapa).
 
-En el código, un reporte de fuga se publica en cuanto se envía (`received` incluido). `awaiting_validation` es verdadero mientras ninguno de sus reportes esté `validated`. Un reporte `rejected` no mantiene el punto en el mapa. La regla de las cuentas de menos de 24 h no está hecha.
+En el código, el mapa público (`GET /incidents/public`) solo incluye incidencias con un reporte `validated`. El mapa de administración (`GET /incidents/map`) incluye también las recién enviadas, con `awaiting_validation` y el centroide real. Un reporte `rejected` no se publica en ninguno. La regla de las cuentas de menos de 24 h no está hecha.
 
 ### 8.4 Fotografías
 
