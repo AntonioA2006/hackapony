@@ -12,9 +12,9 @@ from app.domain.enums import UserRole
 from app.models.entities import User
 
 USERS = [
-    ("ciudadano@ejemplo.test", "Ciudadano Demo", UserRole.CIUDADANO, "Ciudadano123!"),
-    ("admin@ejemplo.test", "Admin Demo", UserRole.ADMINISTRADOR, "Admin12345!"),
-    ("super@ejemplo.test", "Super Demo", UserRole.SUPERADMINISTRADOR, "Super12345!"),
+    ("ciudadano@example.com", "Ciudadano Demo", UserRole.CIUDADANO, "Ciudadano123!"),
+    ("admin@example.com", "Admin Demo", UserRole.ADMINISTRADOR, "Admin12345!"),
+    ("super@example.com", "Super Demo", UserRole.SUPERADMINISTRADOR, "Super12345!"),
 ]
 
 

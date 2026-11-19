@@ -166,7 +166,7 @@ Plataforma ciudadana para **detección, registro, análisis y priorización** de
 - Pesos de urgencia son heurísticos, no calibrados con datos operativos.
 - CONAGUA no verificado automáticamente en esta documentación.
 - Sin evidencia de API oficial de fugas gubernamentales en tiempo real.
-- Datos de ejemplo en SQL/API son **ficticios** (`@ejemplo.test`).
+- Datos de ejemplo en SQL/API son **ficticios** (`@example.com`; el validador de email rechaza dominios reservados como `.test`).
 
 ## Convenciones API
 
