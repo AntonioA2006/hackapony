@@ -18,23 +18,43 @@ def _round2(value) -> float | None:
 
 @router.get("/public")
 def public_overview(db: Session = Depends(get_db)):
-    """Cifras que ve cualquier persona: total resuelto, satisfacción y tiempo medio."""
+    """Cifras públicas reales. Las zonas solo cuentan incidencias ya validadas."""
     row = db.execute(
         text(
             """
             SELECT count(*) FILTER (WHERE status = 'resolved') AS resolved,
+                   count(*) FILTER (WHERE status NOT IN ('resolved', 'dismissed')) AS pending,
                    avg(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 3600)
                      FILTER (WHERE status = 'resolved' AND closed_at IS NOT NULL) AS avg_h
             FROM incidents
             """
         )
     ).mappings().one()
+    zones = db.execute(
+        text(
+            """
+            SELECT m.name AS municipality, s.name AS state, count(DISTINCT i.id) AS cnt
+            FROM incidents i
+            JOIN reports r ON r.incident_id = i.id AND r.status = 'validated'
+            JOIN municipalities m ON m.id = i.municipality_id
+            JOIN states s ON s.cve_ent = m.cve_ent
+            GROUP BY m.name, s.name
+            ORDER BY cnt DESC, m.name
+            LIMIT 5
+            """
+        )
+    ).mappings().all()
     satisfaction = _round2(db.scalar(select(func.avg(IncidentRating.score))))
     return {
+        "reports": int(db.scalar(select(func.count()).select_from(Report)) or 0),
+        "pending": int(row["pending"] or 0),
         "resolved": int(row["resolved"] or 0),
         "satisfaction_pct": _round2(100 * satisfaction / 5) if satisfaction is not None else None,
         "avg_resolution_hours": _round2(row["avg_h"]),
         "ratings": int(db.scalar(select(func.count()).select_from(IncidentRating)) or 0),
+        "zones": [
+            {"municipality": z["municipality"], "state": z["state"], "count": int(z["cnt"] or 0)} for z in zones
+        ],
     }
 
 

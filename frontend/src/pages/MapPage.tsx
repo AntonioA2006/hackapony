@@ -96,6 +96,8 @@ export default function MapPage() {
     ? { lat: fLat, lon: fLon, id: search.get("id") }
     : null;
   const [layer, setLayer] = useState<"agua" | "incidencias">(staff ? "incidencias" : "agua");
+  const [category, setCategory] = useState("all");
+  const [priority, setPriority] = useState("all");
   const counts = useRegionCounts(region.cve_ent, staff && layer === "incidencias");
   const regionColors = useMemo(() => {
     if (!(staff && layer === "incidencias")) return null;
@@ -168,7 +170,10 @@ export default function MapPage() {
 
   const placeTitle = region.municipality_name ?? region.state_name ?? "México";
   const water = region.cvegeo ? munItem?.water : region.cve_ent ? stateItem?.water : national;
-  const list = incidents.data?.items ?? [];
+  const fetched = incidents.data?.items ?? [];
+  const list = fetched.filter(
+    (inc) => (category === "all" || inc.primary_category === category) && (priority === "all" || inc.priority_band === priority),
+  );
   const waiting = bbox === undefined || (typeof bbox === "string" && incidents.isLoading && list.length === 0);
 
   return (
@@ -252,9 +257,9 @@ export default function MapPage() {
               : "La ubicación en el mapa está aproximada (~30 m) para no mostrar el punto exacto del reporte."}
             {incidents.isFetching ? " Actualizando esta vista…" : ""}
           </p>
-          {incidents.data && incidents.data.total > list.length && (
+          {incidents.data && incidents.data.total > fetched.length && (
             <p className="text-[12px] text-warm">
-              Hay {fmtInt(incidents.data.total)} en esta vista; el mapa muestra las {fmtInt(list.length)} más urgentes.
+              Hay {fmtInt(incidents.data.total)} en esta vista; el mapa muestra las {fmtInt(fetched.length)} más urgentes.
             </p>
           )}
         </div>
@@ -265,9 +270,29 @@ export default function MapPage() {
       </div>
 
       <section>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-subheading">{staff ? "Todas las incidencias" : "En esta vista"}</h2>
-          <Tag>{fmtInt(incidents.data?.total ?? 0)}</Tag>
+          <div className="flex flex-wrap gap-2">
+            <label>
+              <span className="sr-only">Categoría</span>
+              <select className="field w-auto min-w-[180px]" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Filtrar por categoría">
+                <option value="all">Todas las categorías</option>
+                {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">Prioridad</span>
+              <select className="field w-auto min-w-[140px]" value={priority} onChange={(e) => setPriority(e.target.value)} aria-label="Filtrar por prioridad">
+                <option value="all">Todas las prioridades</option>
+                {Object.entries(BAND_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </label>
+            <Tag>{fmtInt(list.length)}</Tag>
+          </div>
         </div>
         {waiting ? (
           <p className="rounded-card border border-dashed border-muted bg-card px-4 py-6 text-center text-warm">
@@ -275,7 +300,7 @@ export default function MapPage() {
           </p>
         ) : list.length === 0 ? (
           <p className="rounded-card border border-dashed border-muted bg-card px-4 py-6 text-center text-warm">
-            No hay incidencias en esta vista por ahora.
+            {fetched.length ? "Ninguna incidencia de esta vista coincide con el filtro." : "No hay incidencias en esta vista por ahora."}
           </p>
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-card">

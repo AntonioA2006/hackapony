@@ -4,6 +4,7 @@ import { useAuth } from "./shared/auth/AuthContext";
 import { isCrew, isOperator, isSupervisor, ROLE_LABELS } from "./shared/roles";
 import { useView, VIEW_HOME, viewFor, type View } from "./shared/viewMode";
 import { Button, ButtonLink, Spinner } from "./shared/ui";
+import ContactFab from "./shared/ui/ContactFab";
 import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
@@ -62,7 +63,9 @@ function ViewSwitcher({ view, onChange }: { view: View; onChange: (v: View) => v
 }
 
 const navLink = ({ isActive }: { isActive: boolean }) =>
-  `flex h-8 items-center rounded-full px-3 text-body transition-colors ${isActive ? "text-ink" : "text-warm hover:text-ink"}`;
+  `flex h-9 items-center rounded-full px-3 text-body transition-colors ${isActive ? "bg-sky font-medium text-ink" : "text-warm hover:bg-card hover:text-ink"}`;
+
+const textLink = "flex h-9 items-center rounded-full px-3 text-body text-warm transition-colors hover:bg-card hover:text-ink";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -75,6 +78,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   const staff = Boolean(user) && view !== "ciudadano";
   const links = (
     <>
+      <NavLink to="/" end className={navLink} onClick={() => setOpen(false)}>
+        Inicio
+      </NavLink>
       {user && view === "cuadrilla" && (
         <NavLink to="/cuadrilla" className={navLink} onClick={() => setOpen(false)}>
           {supervisor ? "Órdenes en campo" : "Mis órdenes"}
@@ -93,16 +99,22 @@ function Shell({ children }: { children: React.ReactNode }) {
       <NavLink to="/mapa" className={navLink} onClick={() => setOpen(false)}>
         Mapa
       </NavLink>
-      {user && !staff && (
-        <>
-          <NavLink to="/mis-reportes" className={navLink} onClick={() => setOpen(false)}>
-            Mis reportes
-          </NavLink>
-          <NavLink to="/tablero" className={navLink} onClick={() => setOpen(false)}>
-            Tablero
-          </NavLink>
-        </>
+      {(!user || !staff) && (
+        <NavLink to="/mis-reportes" className={navLink} onClick={() => setOpen(false)}>
+          Reportes
+        </NavLink>
       )}
+      {user && !staff && (
+        <NavLink to="/tablero" className={navLink} onClick={() => setOpen(false)}>
+          Tablero
+        </NavLink>
+      )}
+      <a href="/#indicadores" className={textLink} onClick={() => setOpen(false)}>
+        Estadísticas
+      </a>
+      <a href="/#acerca" className={textLink} onClick={() => setOpen(false)}>
+        Acerca de
+      </a>
       {supervisor && view === "operador" && (
         <NavLink to="/panel/equipo" className={navLink} onClick={() => setOpen(false)}>
           Equipo
@@ -113,11 +125,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-[1000] border-b border-line bg-canvas/90 backdrop-blur">
+      <a href="#contenido" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-[1300] focus:rounded-full focus:bg-card focus:px-3 focus:py-2">
+        Saltar al contenido
+      </a>
+      <header className="sticky top-0 z-[1000] border-b border-line/80 bg-canvas/80 backdrop-blur-md">
         <nav className="mx-auto flex h-14 max-w-page items-center gap-2 px-4 sm:px-6" aria-label="Principal">
           <Logo />
-          <div className="ml-6 hidden items-center md:flex">{links}</div>
-          <div className="ml-auto hidden items-center gap-2 md:flex">
+          <div className="ml-4 hidden items-center lg:flex">{links}</div>
+          <div className="ml-auto hidden items-center gap-2 lg:flex">
             {user ? (
               <>
                 <NavLink to="/perfil" className={navLink} title={ROLE_LABELS[user.role]}>
@@ -147,16 +162,16 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <button
             type="button"
-            className="ml-auto rounded-full border border-line px-3 py-1.5 text-body md:hidden"
+            className="ml-auto inline-flex h-10 items-center rounded-full border border-line bg-card px-3 text-body lg:hidden"
             aria-expanded={open}
             aria-controls="menu-movil"
             onClick={() => setOpen((v) => !v)}
           >
-            Menú
+            {open ? "Cerrar" : "Menú"}
           </button>
         </nav>
         {open && (
-          <div id="menu-movil" className="border-t border-line bg-canvas px-4 pb-4 pt-2 md:hidden">
+          <div id="menu-movil" className="border-t border-line bg-canvas px-4 pb-4 pt-2 lg:hidden">
             <div className="flex flex-col">{links}</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {user ? (
@@ -186,9 +201,10 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </header>
-      <main key={location.pathname} className="anim-page mx-auto w-full max-w-page flex-1 px-4 py-10 sm:px-6">
+      <main id="contenido" key={location.pathname} className="anim-page mx-auto w-full max-w-page flex-1 px-4 pb-28 pt-8 sm:px-6 sm:pt-10">
         {children}
       </main>
+      <ContactFab />
       <LocationConsentDialog />
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-page flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-warm sm:px-6">

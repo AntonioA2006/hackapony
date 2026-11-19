@@ -200,7 +200,11 @@ def test_public_home_stats(client):
     res = client.get("/api/v1/statistics/public")
     assert res.status_code == 200, res.text
     body = res.json()
+    assert isinstance(body["reports"], int) and body["reports"] >= 0
+    assert isinstance(body["pending"], int) and body["pending"] >= 0
     assert isinstance(body["resolved"], int) and body["resolved"] >= 0
     assert body["satisfaction_pct"] is None or 0 <= body["satisfaction_pct"] <= 100
     assert body["avg_resolution_hours"] is None or body["avg_resolution_hours"] >= 0
     assert isinstance(body["ratings"], int)
+    assert isinstance(body["zones"], list)
+    assert all({"municipality", "state", "count"} <= set(z) for z in body["zones"])
