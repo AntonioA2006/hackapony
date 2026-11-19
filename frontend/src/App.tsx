@@ -8,6 +8,7 @@ import ContactFab from "./shared/ui/ContactFab";
 import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AboutPage from "./pages/AboutPage";
+import LegalPage from "./pages/LegalPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import MapPage from "./pages/MapPage";
@@ -67,9 +68,11 @@ const navLink = ({ isActive }: { isActive: boolean }) =>
   `flex h-9 items-center rounded-full px-3 text-body transition-colors ${isActive ? "bg-sky font-medium text-ink" : "text-warm hover:bg-card hover:text-ink"}`;
 
 const textLink = "flex h-9 items-center rounded-full px-3 text-body text-warm transition-colors hover:bg-card hover:text-ink";
+const menuItem = "flex min-h-11 w-full items-center gap-3 rounded-card px-3 text-left text-body text-ink hover:bg-sky";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const { chosen, choose } = useView();
@@ -161,9 +164,24 @@ function Shell({ children }: { children: React.ReactNode }) {
               </>
             )}
           </div>
+          {user && view === "ciudadano" && (
+            <ButtonLink to="/reportar" variant="primary" className="ml-auto lg:hidden">
+              Reportar
+            </ButtonLink>
+          )}
+          {view === "operador" && (
+            <NavLink to="/panel" className="ml-auto text-body font-medium text-ink lg:hidden" onClick={() => setOpen(false)}>
+              Panel
+            </NavLink>
+          )}
+          {view === "cuadrilla" && (
+            <NavLink to="/cuadrilla" className="ml-auto text-body font-medium text-ink lg:hidden" onClick={() => setOpen(false)}>
+              Órdenes
+            </NavLink>
+          )}
           <button
             type="button"
-            className="ml-auto grid h-11 w-11 place-items-center rounded-full border border-[#e2e8f0] bg-white text-ink lg:hidden"
+            className={`${user ? "" : "ml-auto"} grid h-11 w-11 place-items-center rounded-full border border-[#e2e8f0] bg-white text-ink lg:hidden`}
             aria-expanded={open}
             aria-controls="menu-movil"
             aria-label={open ? "Cerrar menú" : "Abrir menú"}
@@ -173,30 +191,68 @@ function Shell({ children }: { children: React.ReactNode }) {
           </button>
         </nav>
         {open && (
-          <div id="menu-movil" className="border-t border-line bg-canvas px-4 pb-4 pt-2 lg:hidden">
-            <div className="flex flex-col">{links}</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {user ? (
+          <div id="menu-movil" className="border-t border-line bg-canvas px-4 pb-4 pt-3 lg:hidden">
+            <p className="mb-2 text-[12px] font-medium uppercase tracking-[0.04em] text-warm">
+              {view === "operador" ? "Operador" : view === "cuadrilla" ? "Cuadrilla" : user ? "Ciudadano" : "Menú"}
+            </p>
+            <div className="flex flex-col gap-1">
+              {view === "operador" ? (
                 <>
-                  <ButtonLink to="/reportar" variant="primary" onClick={() => setOpen(false)}>
-                    Reportar fuga
-                  </ButtonLink>
-                  <ButtonLink to="/perfil" onClick={() => setOpen(false)}>
-                    Mi perfil
-                  </ButtonLink>
+                  <NavLink to="/nosotros" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-people-group w-5" aria-hidden /> Sobre nosotros
+                  </NavLink>
                   {supervisor && <ViewSwitcher view={view} onChange={(v) => { choose(v); setOpen(false); }} />}
-                  <button type="button" className="px-3 text-warm" onClick={() => { choose(null); void logout(); }}>
-                    Salir
+                  <button type="button" className={menuItem} onClick={() => { setOpen(false); choose(null); void logout().then(() => navigate("/login")); }}>
+                    <i className="fa-solid fa-right-left w-5" aria-hidden /> Cambiar de sesión
+                  </button>
+                  <button type="button" className={menuItem} onClick={() => { setOpen(false); choose(null); void logout(); }}>
+                    <i className="fa-solid fa-right-from-bracket w-5" aria-hidden /> Cerrar sesión
+                  </button>
+                </>
+              ) : view === "cuadrilla" ? (
+                <>
+                  <NavLink to="/cuadrilla" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-house w-5" aria-hidden /> Inicio
+                  </NavLink>
+                  <NavLink to="/nosotros" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-people-group w-5" aria-hidden /> Sobre nosotros
+                  </NavLink>
+                  <NavLink to="/perfil" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-user w-5" aria-hidden /> Cuenta
+                  </NavLink>
+                  <button type="button" className={menuItem} onClick={() => { setOpen(false); choose(null); void logout(); }}>
+                    <i className="fa-solid fa-right-from-bracket w-5" aria-hidden /> Cerrar sesión
+                  </button>
+                </>
+              ) : user ? (
+                <>
+                  <NavLink to="/tablero" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-table-columns w-5" aria-hidden /> Tablero
+                  </NavLink>
+                  <a href="/#indicadores" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-chart-simple w-5" aria-hidden /> Estadísticas
+                  </a>
+                  <NavLink to="/nosotros" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-people-group w-5" aria-hidden /> Sobre nosotros
+                  </NavLink>
+                  <NavLink to="/perfil" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-user w-5" aria-hidden /> Sesión
+                  </NavLink>
+                  <button type="button" className={menuItem} onClick={() => { setOpen(false); choose(null); void logout(); }}>
+                    <i className="fa-solid fa-right-from-bracket w-5" aria-hidden /> Cerrar sesión
                   </button>
                 </>
               ) : (
                 <>
-                  <ButtonLink to="/registro" variant="primary" onClick={() => setOpen(false)}>
-                    Crear cuenta
-                  </ButtonLink>
-                  <ButtonLink to="/login" onClick={() => setOpen(false)}>
-                    Iniciar sesión
-                  </ButtonLink>
+                  <NavLink to="/nosotros" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-people-group w-5" aria-hidden /> Sobre nosotros
+                  </NavLink>
+                  <NavLink to="/aviso-legal" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-scale-balanced w-5" aria-hidden /> Aviso legal
+                  </NavLink>
+                  <NavLink to="/login" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-right-to-bracket w-5" aria-hidden /> Iniciar sesión
+                  </NavLink>
                 </>
               )}
             </div>
@@ -214,6 +270,10 @@ function Shell({ children }: { children: React.ReactNode }) {
             Agua Alerta ·{" "}
             <Link to="/nosotros" className="underline hover:text-ink">
               Sobre nosotros
+            </Link>
+            {" · "}
+            <Link to="/aviso-legal" className="underline hover:text-ink">
+              Aviso legal
             </Link>
           </p>
           <p>
@@ -280,6 +340,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/nosotros" element={<AboutPage />} />
+          <Route path="/aviso-legal" element={<LegalPage />} />
           <Route path="/mapa" element={<MapPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar" element={<ForgotPasswordPage />} />
