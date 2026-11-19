@@ -75,6 +75,7 @@ type Props = {
   onPick?: (lat: number, lon: number) => void;
   className?: string;
   onConfirm?: (id: string) => void;
+  onRate?: (id: string, score: number) => void;
   /** Ubicación exacta a enfocar (desde un reporte o incidencia): vuela ahí con marcador pulsante. */
   focus?: { lat: number; lon: number; id?: string | null } | null;
   /** Color por región (id de estado o municipio) para la capa de incidencias del personal. */
@@ -162,6 +163,7 @@ export default function IncidentsMap({
   onPick,
   className = "h-[52vh] min-h-[240px] sm:h-[62vh] sm:min-h-[420px]",
   onConfirm,
+  onRate,
   focus,
   regionColors,
   detailHref,
@@ -263,6 +265,22 @@ export default function IncidentsMap({
                 <a href={detailHref(inc.id)} className="mr-2 inline-block rounded-full bg-cyan px-3 py-1 text-[12px] font-medium text-white">
                   Abrir ficha
                 </a>
+              )}
+              {onRate && (
+                <p className="flex flex-wrap items-center gap-1 pt-1">
+                  <span className="text-[12px] text-warm">Satisfacción</span>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className="min-h-11 min-w-8 rounded-full border border-line px-2 text-[13px] text-ink hover:border-muted"
+                      onClick={() => onRate(inc.id, n)}
+                      aria-label={`Calificar ${n} de 5`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </p>
               )}
               {onConfirm && (
                 <button

@@ -40,6 +40,8 @@ def test_register_and_create_report(client):
             "severity": "high",
             "latitude": 19.4326,
             "longitude": -99.1332,
+            "device_latitude": 19.4326,
+            "device_longitude": -99.1332,
         },
     )
     assert rep.status_code == 201, rep.text

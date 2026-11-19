@@ -20,6 +20,8 @@ class ReportCreate(BaseModel):
     address_reference: str | None = Field(default=None, max_length=500)
     reported_at: datetime | None = None
     leak_flow: LeakFlow | None = Field(default=None, description="goteo | chorro | inundacion")
+    device_latitude: float | None = Field(default=None, ge=-90, le=90)
+    device_longitude: float | None = Field(default=None, ge=-180, le=180)
 
     @field_validator("title", "description", "address_reference", mode="before")
     @classmethod

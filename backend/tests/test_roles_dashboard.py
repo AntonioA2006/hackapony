@@ -41,8 +41,10 @@ def _report(client, headers, **over) -> dict:
         "description": "Descripción suficientemente larga",
         "category": "broken_pipe",
         "severity": "high",
-        "latitude": random.uniform(19.3, 21.0),
-        "longitude": random.uniform(-102.5, -98.6),
+        "latitude": (lat := random.uniform(19.3, 21.0)),
+        "longitude": (lon := random.uniform(-102.5, -98.6)),
+        "device_latitude": lat,
+        "device_longitude": lon,
         "leak_flow": "chorro",
     }
     payload.update(over)

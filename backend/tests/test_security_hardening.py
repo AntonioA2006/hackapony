@@ -42,6 +42,8 @@ def test_reporter_cannot_confirm_own_incident(client: TestClient):
             "severity": "medium",
             "latitude": 18.5,
             "longitude": -99.2,
+            "device_latitude": 18.5,
+            "device_longitude": -99.2,
         },
     )
     assert rep.status_code == 201
@@ -65,6 +67,8 @@ def test_photo_upload_validates_content(client: TestClient):
             "severity": "low",
             "latitude": 18.51,
             "longitude": -99.21,
+            "device_latitude": 18.51,
+            "device_longitude": -99.21,
         },
     )
     assert rep.status_code == 201

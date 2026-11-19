@@ -201,6 +201,7 @@ def test_closing_incident_deletes_its_photos(client, tmp_path, monkeypatch):
     try:
         citizen = {"Authorization": f"Bearer {_user_token(UserRole.CIUDADANO)}"}
         admin = {"Authorization": f"Bearer {_user_token(UserRole.ADMINISTRADOR)}"}
+        lat = 20.6597 + (uuid.uuid4().int % 1000) * 1e-5
         rep = client.post(
             "/api/v1/reports",
             headers=citizen,
@@ -209,8 +210,10 @@ def test_closing_incident_deletes_its_photos(client, tmp_path, monkeypatch):
                 "description": "Descripción suficientemente larga para validar",
                 "category": "broken_pipe",
                 "severity": "medium",
-                "latitude": 20.6597 + (uuid.uuid4().int % 1000) * 1e-5,
+                "latitude": lat,
                 "longitude": -103.3496,
+                "device_latitude": lat,
+                "device_longitude": -103.3496,
             },
         )
         assert rep.status_code == 201, rep.text
@@ -263,6 +266,8 @@ def test_report_outside_mexico_rejected(client, lat, lon, code):
             "category": "leak_public_road",
             "latitude": lat,
             "longitude": lon,
+            "device_latitude": lat,
+            "device_longitude": lon,
         },
     )
     assert res.status_code == code, res.text
@@ -279,6 +284,8 @@ def test_report_blank_text_rejected(client):
             "category": "leak_public_road",
             "latitude": 19.43,
             "longitude": -99.13,
+            "device_latitude": 19.43,
+            "device_longitude": -99.13,
         },
     )
     assert res.status_code == 422

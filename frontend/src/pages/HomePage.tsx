@@ -1,15 +1,23 @@
-import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../shared/auth/AuthContext";
-import { fmtInt, fmtPct } from "../shared/labels";
+import { apiFetch } from "../shared/api/client";
+import { fmtFixed } from "../shared/labels";
 import IncidentsMap from "../shared/map/IncidentsMap";
-import { useStates, useStatesGeo } from "../shared/region/api";
+import { useStatesGeo } from "../shared/region/api";
 import { ButtonLink, Card, Stat } from "../shared/ui";
+
+type Overview = {
+  resolved_pct: number | null;
+  avg_resolution_hours: number | null;
+  satisfaction_avg: number | null;
+  ratings: number;
+};
 
 const STEPS = [
   {
     n: "01",
     title: "Reporta en un minuto",
-    body: "Marca el punto en el mapa, describe la fuga y, si quieres, agrega fotos. Recibes un folio para darle seguimiento.",
+    body: "El reporte usa el lugar donde estás, describes la fuga y, si quieres, agregas fotos. Recibes un folio para darle seguimiento.",
   },
   {
     n: "02",
@@ -25,16 +33,12 @@ const STEPS = [
 
 export default function HomePage() {
   const { user } = useAuth();
-  const states = useStates();
   const geo = useStatesGeo();
-
-  const stats = useMemo(() => {
-    const items = states.data ?? [];
-    const viv = items.reduce((a, s) => a + (s.water?.viviendas ?? 0), 0);
-    const sin = items.reduce((a, s) => a + (s.water?.sin_agua_entubada ?? 0), 0);
-    const open = items.reduce((a, s) => a + s.open_incidents, 0);
-    return { viv, sin, pct: viv ? (100 * sin) / viv : null, open };
-  }, [states.data]);
+  const overview = useQuery({
+    queryKey: ["public-stats"],
+    queryFn: () => apiFetch<Overview>("/statistics/public"),
+  });
+  const stats = overview.data;
 
   return (
     <div className="space-y-24">
@@ -60,13 +64,17 @@ export default function HomePage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
+        <Stat label="Incidencias resueltas" value={stats ? `${fmtFixed(stats.resolved_pct)} %` : "—"} note="Del total, sin contar las descartadas" />
         <Stat
-          label="Viviendas sin agua entubada"
-          value={fmtInt(stats.sin || null)}
-          note="México, Censo 2020 (INEGI)"
+          label="Tiempo promedio de resolución"
+          value={stats?.avg_resolution_hours == null ? "—" : `${fmtFixed(stats.avg_resolution_hours)} h`}
+          note="Desde que se abre hasta que se cierra"
         />
-        <Stat label="Proporción del total" value={fmtPct(stats.pct)} note={`de ${fmtInt(stats.viv || null)} viviendas habitadas`} />
-        <Stat label="Incidencias activas" value={fmtInt(stats.open)} note="reportadas y en seguimiento" />
+        <Stat
+          label="Satisfacción"
+          value={stats?.satisfaction_avg == null ? "—" : `${fmtFixed(stats.satisfaction_avg)} / 5`}
+          note={stats ? `${stats.ratings} calificaciones` : "Cualquier cuenta puede calificar"}
+        />
       </section>
 
       <section>

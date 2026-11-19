@@ -88,9 +88,9 @@ export function StatusTag({ status }: { status: string }) {
 
 export function Stat({ label, value, note }: { label: string; value: ReactNode; note?: ReactNode }) {
   return (
-    <div className="lift rounded-card border border-line bg-card p-5">
+    <div className="lift min-w-0 rounded-card border border-line bg-card p-5">
       <p className="text-[12px] font-medium uppercase tracking-[0.025em] text-warm">{label}</p>
-      <p className="mt-1 font-display text-heading-sm tabular-nums">{value}</p>
+      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-display text-heading-sm tabular-nums">{value}</p>
       {note && <p className="mt-1 text-[12px] text-warm">{note}</p>}
     </div>
   );

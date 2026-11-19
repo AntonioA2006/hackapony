@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 
+from app.services.spatial import distance_m
 from app.services.public_geo import (
     BBOX_MAX_LAT_SPAN,
     BBOX_MAX_LON_SPAN,
@@ -29,6 +30,11 @@ def _meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def _distance_to_grid(value: float) -> float:
     snapped = round(value / GRID_DEG) * GRID_DEG
     return abs(value - snapped)
+
+
+def test_distance_is_about_250_meters_near_mexico():
+    # 250 m al norte ≈ 0.00225° de latitud
+    assert distance_m(19.43, -99.13, 19.43225, -99.13) == pytest.approx(250, abs=5)
 
 
 def test_bbox_valid_accepts_order_and_whitespace():

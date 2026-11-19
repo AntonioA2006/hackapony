@@ -149,6 +149,19 @@ class Incident(Base):
     history: Mapped[list["IncidentHistory"]] = relationship(back_populates="incident")
 
 
+class IncidentRating(Base):
+    """Satisfacción de cualquier usuario autenticado sobre una incidencia (1 a 5)."""
+
+    __tablename__ = "incident_ratings"
+    __table_args__ = (UniqueConstraint("incident_id", "user_id", name="incident_ratings_unique"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CitizenConfirmation(Base):
     __tablename__ = "citizen_confirmations"
     __table_args__ = (UniqueConstraint("incident_id", "user_id", name="citizen_confirmations_unique"),)

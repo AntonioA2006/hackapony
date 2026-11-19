@@ -7,7 +7,7 @@ import IncidentsMap from "../shared/map/IncidentsMap";
 import { isInsideMexico, useMexicoOutline, useMunicipalities, useStates } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
 import { Button, Field, Notice, PageHeader } from "../shared/ui";
-import { GeoError, getBrowserPosition, parseCoordinate, reverseGeocode, searchAddress, type AddressResult } from "../shared/geo";
+import { GeoError, MAX_REPORT_DISTANCE_M, getBrowserPosition, metersBetween, parseCoordinate, reverseGeocode, searchAddress, type AddressResult } from "../shared/geo";
 import { fieldA11y, PHOTO_MAX_COUNT, validateLength, validatePhotos } from "../shared/validation";
 
 type Created = { id: string; public_id: string; incident_id: string | null; nearby_suggestions?: { public_id: string; distance_m: number }[] };
@@ -29,6 +29,7 @@ export default function ReportPage() {
   const [severity, setSeverity] = useState("medium");
   const [flow, setFlow] = useState<string | null>(null);
   const [point, setPoint] = useState<[number, number] | null>(null);
+  const [here, setHere] = useState<{ lat: number; lon: number } | null>(null);
   const [address, setAddress] = useState("");
   // La dirección se autocompleta desde el punto mientras la persona no la edite a mano
   const [addressAuto, setAddressAuto] = useState(true);
@@ -67,11 +68,15 @@ export default function ReportPage() {
     description: validateLength(description, 10, 2000, "Descripción"),
     address: address.trim().length > 200 ? "Referencia: máximo 200 caracteres." : undefined,
     photos: validatePhotos(photos),
-    point: !point
-      ? "Marca en el mapa el lugar del problema o usa tu ubicación."
-      : inside === false || located.isError
-        ? "Ese punto está fuera de México. Agua Alerta solo recibe reportes en territorio nacional."
-        : undefined,
+    point: !here
+      ? "Activa tu ubicación. Solo puedes reportar donde estás."
+      : !point
+        ? "Todavía no tenemos tu ubicación."
+        : metersBetween(here.lat, here.lon, point[0], point[1]) > MAX_REPORT_DISTANCE_M
+          ? "Ese punto está lejos de ti. Solo puedes reportar a menos de 250 m de donde estás."
+          : inside === false || located.isError
+            ? "Ese punto está fuera de México. Agua Alerta solo recibe reportes en territorio nacional."
+            : undefined,
   };
   const show = (k: keyof typeof errors) => (submitted ? errors[k] : undefined);
 
@@ -81,8 +86,19 @@ export default function ReportPage() {
     if (next.length > PHOTO_MAX_COUNT) setPhotoWarn(`Solo se conservaron las primeras ${PHOTO_MAX_COUNT} fotografías.`);
   };
 
-  /** Cualquier origen (GPS, mapa, búsqueda, coordenadas) termina aquí. */
-  const choosePoint = (lat: number, lon: number) => {
+  const nearHere = (lat: number, lon: number, fix = here) =>
+    Boolean(fix) && metersBetween(fix!.lat, fix!.lon, lat, lon) <= MAX_REPORT_DISTANCE_M;
+
+  /** Solo acepta un punto junto a la persona. */
+  const choosePoint = (lat: number, lon: number, fix = here) => {
+    if (!fix) {
+      setGeoMsg("Primero activa tu ubicación. Solo puedes reportar donde estás.");
+      return;
+    }
+    if (!nearHere(lat, lon, fix)) {
+      setGeoMsg("Ese punto está lejos de ti. Solo puedes reportar a menos de 250 m de donde estás.");
+      return;
+    }
     setPoint([lat, lon]);
     setGeoMsg(null);
     setCoordErr(null);
@@ -116,7 +132,9 @@ export default function ReportPage() {
     setGpsBusy(true);
     try {
       const pos = await getBrowserPosition();
-      choosePoint(pos.lat, pos.lon);
+      const fix = { lat: pos.lat, lon: pos.lon };
+      setHere(fix);
+      choosePoint(pos.lat, pos.lon, fix);
       if (pos.accuracy > 200) setGeoMsg(`Ubicación aproximada (±${Math.round(pos.accuracy)} m). Ajusta el punto en el mapa si hace falta.`);
     } catch (err) {
       setGeoMsg(err instanceof GeoError ? err.message : "No se pudo obtener tu ubicación. Marca el punto en el mapa.");
@@ -124,6 +142,12 @@ export default function ReportPage() {
       setGpsBusy(false);
     }
   };
+
+  useEffect(() => {
+    void useGps();
+    // Solo al abrir el formulario: el punto nace en donde está la persona.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runSearch = async () => {
     if (query.trim().length < 3) {
@@ -164,6 +188,13 @@ export default function ReportPage() {
     setError("");
     setPhotoWarn("");
     try {
+      const pos = await getBrowserPosition();
+      const fix = { lat: pos.lat, lon: pos.lon };
+      setHere(fix);
+      if (metersBetween(fix.lat, fix.lon, point[0], point[1]) > MAX_REPORT_DISTANCE_M) {
+        setError("Ese punto está lejos de ti. Solo puedes reportar a menos de 250 m de donde estás.");
+        return;
+      }
       const report = await apiFetch<Created>("/reports", {
         method: "POST",
         body: JSON.stringify({
@@ -173,6 +204,8 @@ export default function ReportPage() {
           severity,
           latitude: point[0],
           longitude: point[1],
+          device_latitude: fix.lat,
+          device_longitude: fix.lon,
           address_reference: address || null,
           leak_flow: flow,
         }),
@@ -361,7 +394,8 @@ export default function ReportPage() {
             )}
           </Field>
           {error && <Notice tone="error">{error}</Notice>}
-          <Button type="submit" variant="primary" disabled={busy} className="w-full sm:w-auto">
+          <Button type="submit" variant="primary" disabled={busy} className="w-full sm:w-auto" aria-busy={busy}>
+            {busy && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />}
             {busy ? "Enviando…" : "Enviar reporte"}
           </Button>
         </div>
@@ -369,7 +403,7 @@ export default function ReportPage() {
         <div className="space-y-3">
           <div className="rounded-card border border-line bg-card p-4">
             <p className="label">Ubicación del problema</p>
-            <p className="mb-3 text-[12px] text-warm">Usa tu ubicación, busca una dirección, escribe coordenadas o toca el mapa.</p>
+            <p className="mb-3 text-[12px] text-warm">Solo puedes reportar donde estás. Activa tu ubicación; el mapa permite un ajuste de hasta 250 m.</p>
             <div className="flex flex-wrap items-stretch gap-2">
               <Button variant="dark" onClick={() => void useGps()} disabled={gpsBusy}>
                 {gpsBusy ? "Obteniendo ubicación…" : "Usar mi ubicación"}

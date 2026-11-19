@@ -36,8 +36,10 @@ export const INCIDENT_STATUS_LABELS: Record<string, string> = {
 export const label = (map: Record<string, string>, key: string | null | undefined) => (key ? map[key] ?? key : "—");
 
 export const fmtInt = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("es-MX"));
-export const fmtPct = (n: number | null | undefined) =>
-  n == null ? "Sin dato" : `${n.toLocaleString("es-MX", { maximumFractionDigits: 1 })} %`;
+export const fmtFixed = (n: number | null | undefined, digits = 2) =>
+  n == null ? "—" : n.toLocaleString("es-MX", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+export const fmtPct = (n: number | null | undefined) => (n == null ? "Sin dato" : `${fmtFixed(n)} %`);
 
 export const FLOW_LABELS: Record<string, string> = {
   goteo: "Goteo",

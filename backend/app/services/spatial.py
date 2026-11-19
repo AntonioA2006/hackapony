@@ -87,6 +87,22 @@ def reports_within_radius(
         q = q.where(Report.user_id != exclude_user_id)
     return db.scalars(q).all()
 
+def distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distancia aproximada en metros entre dos puntos WGS84."""
+    import math
+
+    radius = 6_371_000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2) ** 2
+    return 2 * radius * math.asin(min(1.0, math.sqrt(a)))
+
+
+# El reporte tiene que caer junto a la persona: el GPS del celular no es exacto, pero no permite otro municipio.
+MAX_REPORT_DISTANCE_M = 250.0
+
+
 def point_in_mexico(db: Session, lat: float, lon: float) -> bool:
     """True si el punto cae en alguna entidad (polígonos INEGI). Si aún no hay estados cargados, no bloquea."""
     loaded = db.execute(text("SELECT EXISTS (SELECT 1 FROM states)")).scalar()
