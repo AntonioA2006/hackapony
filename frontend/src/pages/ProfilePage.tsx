@@ -45,7 +45,7 @@ export default function ProfilePage() {
 
       <Card>
         <div className="mb-4 rounded-input border border-dashed border-muted bg-canvas p-3">
-          <p className="text-[12px] text-warm">Mi ID · compártelo con supervisión si te van a nombrar técnico</p>
+          <p className="text-[12px] text-warm">Mi ID · compártelo con supervisión si te asignarán rol de operador o cuadrilla</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <code className="break-all font-mono text-[13px] text-ink">{user?.id}</code>
             <Button

@@ -122,3 +122,20 @@ UPDATE users SET role = 'SUPERADMINISTRADOR' WHERE email = 'tu-correo@dominio.co
 ```
 
 o definiendo `BOOTSTRAP_SUPERADMIN_EMAIL` en Render y reiniciando el servicio (promueve esa cuenta si ya existe).
+
+## Roles y flujo operativo
+
+| Rol | Cómo entra | Qué hace |
+|-----|-----------|----------|
+| Ciudadano | “Entrar” | Reporta con correo verificado (obligatorio para reportar y subir fotos); **un ticket activo a la vez**; ve 3 etapas: emitido → validado por operador → atendido por cuadrilla |
+| Operador | “Entrar como operador” | Ve todas las incidencias y métricas; valida o descarta; **envía a cuadrilla** (valida reportes pendientes, asigna y pone “en atención”) |
+| Cuadrilla | “Entrar como cuadrilla” | Solo sus órdenes: ruta directa desde su GPS, distancia, copiar coordenadas, navegar, **llamar** a quien reportó; **marca atendida** → se cierra el ticket, se avisa y se borran las fotos |
+| Supervisión | “Entrar” (no tiene acceso propio) | Todo lo anterior; asigna el rol de operador, cuadrilla o ciudadano desde *Equipo* usando el ID de la persona |
+
+Teléfono del organismo operador para el botón “Llamar” (opcional, por municipio), en el build del frontend:
+
+```bash
+VITE_WATER_UTILITY_PHONE=4431234567 VITE_WATER_UTILITY_NAME="OOAPAS Morelia" npm run build
+```
+
+Sin esa variable solo se muestra el botón de emergencias 911.

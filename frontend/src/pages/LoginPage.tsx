@@ -1,14 +1,24 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../shared/auth/AuthContext";
+import { useAuth, type User } from "../shared/auth/AuthContext";
 import { authErrorMessage } from "../shared/firebase";
+import { homeFor, isCrew, isOperator } from "../shared/roles";
 import { Button, Field, Notice } from "../shared/ui";
 import { fieldA11y, validateEmail } from "../shared/validation";
 import AuthLayout from "./AuthLayout";
 
+type Entry = "ciudadano" | "operador" | "cuadrilla";
+
+const ENTRY_TEXT: Record<Entry, { title: string; lead: string }> = {
+  ciudadano: { title: "Bienvenida de", lead: "Inicia sesión para reportar y dar seguimiento a tu caso." },
+  operador: { title: "Acceso de", lead: "Despacho: valida incidencias y envíalas a las cuadrillas." },
+  cuadrilla: { title: "Acceso de", lead: "Personal de campo: consulta y cierra tus órdenes de atención." },
+};
+
 export default function LoginPage() {
-  const { login, waking } = useAuth();
+  const { login, logout, waking } = useAuth();
   const navigate = useNavigate();
+  const [entry, setEntry] = useState<Entry>("ciudadano");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,8 +34,19 @@ export default function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await login(email, password);
-      navigate("/tablero");
+      const me: User = await login(email.trim(), password);
+      // Las entradas de personal exigen ese rol; supervisión entra por la entrada normal.
+      if (entry === "operador" && !isOperator(me.role)) {
+        await logout();
+        setError("Tu cuenta no tiene el rol de operador. Pide a supervisión que te lo asigne.");
+        return;
+      }
+      if (entry === "cuadrilla" && !isCrew(me.role)) {
+        await logout();
+        setError("Tu cuenta no pertenece a una cuadrilla. Pide a supervisión que te asigne ese rol.");
+        return;
+      }
+      navigate(homeFor(me.role));
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
@@ -33,39 +54,59 @@ export default function LoginPage() {
     }
   };
 
+  const t = ENTRY_TEXT[entry];
+  const word = entry === "ciudadano" ? "vuelta" : entry === "operador" ? "operador" : "cuadrilla";
+
   return (
     <AuthLayout
-      title={<>Bienvenida de <span className="highlight">vuelta</span></>}
-      lead="Inicia sesión para reportar y dar seguimiento a tus casos."
-      footer={
+      title={
         <>
-          ¿Aún no tienes cuenta?{" "}
-          <Link className="text-cyan-edge hover:underline" to="/registro">
-            Crear cuenta
-          </Link>
+          {t.title} <span className="highlight">{word}</span>
         </>
+      }
+      lead={t.lead}
+      footer={
+        entry === "ciudadano" ? (
+          <>
+            ¿Aún no tienes cuenta?{" "}
+            <Link className="text-cyan-edge hover:underline" to="/registro">
+              Crear cuenta
+            </Link>
+          </>
+        ) : (
+          <button type="button" className="text-cyan-edge hover:underline" onClick={() => { setEntry("ciudadano"); setError(""); }}>
+            ← Volver al acceso ciudadano
+          </button>
+        )
       }
     >
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {error && <Notice tone="error">{error}</Notice>}
-        {busy && waking && (
-          <Notice>El servidor estaba en reposo y está despertando; esto puede tardar hasta un minuto. No cierres la página.</Notice>
-        )}
-        <Field label="Correo electrónico" htmlFor="login-email">
-          <input className="field" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required {...fieldA11y("login-email")} />
+        {busy && waking && <Notice>El servidor estaba en reposo y está despertando; puede tardar hasta un minuto.</Notice>}
+        <Field label={entry === "ciudadano" ? "Correo electrónico" : "Usuario (correo institucional)"} htmlFor="login-email">
+          <input className="field" type="email" inputMode="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required {...fieldA11y("login-email")} />
         </Field>
         <Field label="Contraseña" htmlFor="login-pass">
           <input className="field" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required {...fieldA11y("login-pass")} />
         </Field>
-        <div className="flex items-center justify-between gap-3">
+        <Button type="submit" variant="primary" disabled={busy} className="w-full">
+          {busy ? (waking ? "Despertando el servidor…" : "Entrando…") : entry === "ciudadano" ? "Entrar" : `Entrar como ${word}`}
+        </Button>
+        <div className="flex justify-end">
           <Link to="/recuperar" className="text-[13px] text-warm hover:text-ink">
             ¿Olvidaste tu contraseña?
           </Link>
-          <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? (waking ? "Despertando el servidor…" : "Entrando…") : "Entrar"}
-          </Button>
         </div>
       </form>
+      {entry === "ciudadano" && (
+        <div className="mt-6 border-t border-line pt-5">
+          <p className="mb-3 text-center text-[12px] text-warm">¿Eres personal del organismo operador?</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={() => { setEntry("operador"); setError(""); }}>Entrar como operador</Button>
+            <Button onClick={() => { setEntry("cuadrilla"); setError(""); }}>Entrar como cuadrilla</Button>
+          </div>
+        </div>
+      )}
     </AuthLayout>
   );
 }

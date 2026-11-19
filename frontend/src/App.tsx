@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./shared/auth/AuthContext";
-import { isStaff, isSupervisor, ROLE_LABELS } from "./shared/roles";
+import { homeFor, isCrew, isOperator, isStaff, isSupervisor, ROLE_LABELS } from "./shared/roles";
 import { Button, ButtonLink, Spinner } from "./shared/ui";
 import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -17,6 +17,8 @@ const StaffDashboardPage = lazy(() => import("./pages/staff/StaffDashboardPage")
 const IncidentsQueuePage = lazy(() => import("./pages/staff/IncidentsQueuePage"));
 const IncidentDetailPage = lazy(() => import("./pages/staff/IncidentDetailPage"));
 const TeamPage = lazy(() => import("./pages/staff/TeamPage"));
+const CrewOrdersPage = lazy(() => import("./pages/crew/CrewOrdersPage"));
+const CrewOrderPage = lazy(() => import("./pages/crew/CrewOrderPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const MyReportsPage = lazy(() => import("./pages/MyReportsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
@@ -44,7 +46,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   const staff = isStaff(user?.role);
   const links = (
     <>
-      {staff && (
+      {isCrew(user?.role) && (
+        <NavLink to="/cuadrilla" className={navLink} onClick={() => setOpen(false)}>
+          Mis órdenes
+        </NavLink>
+      )}
+      {isOperator(user?.role) && (
         <>
           <NavLink to="/panel" end className={navLink} onClick={() => setOpen(false)}>
             Panel
@@ -91,9 +98,11 @@ function Shell({ children }: { children: React.ReactNode }) {
                 <button type="button" onClick={() => void logout()} className="px-3 text-body text-warm hover:text-ink">
                   Salir
                 </button>
-                <ButtonLink to="/reportar" variant="primary">
-                  Reportar fuga
-                </ButtonLink>
+                {!staff && (
+                  <ButtonLink to="/reportar" variant="primary">
+                    Reportar fuga
+                  </ButtonLink>
+                )}
               </>
             ) : (
               <>
@@ -166,11 +175,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Solo personal (técnico o supervisión); `supervisor` restringe a supervisión. */
-function StaffRoute({ children, supervisor = false }: { children: React.ReactNode; supervisor?: boolean }) {
+/** Rutas por rol: despacho (operador/supervisión), cuadrilla o solo supervisión. */
+function StaffRoute({ children, need = "operator" }: { children: React.ReactNode; need?: "operator" | "crew" | "supervisor" }) {
   const { user } = useAuth();
-  const allowed = supervisor ? isSupervisor(user?.role) : isStaff(user?.role);
-  return <PrivateRoute>{allowed ? children : <Navigate to="/tablero" replace />}</PrivateRoute>;
+  const allowed = need === "supervisor" ? isSupervisor(user?.role) : need === "crew" ? isCrew(user?.role) : isOperator(user?.role);
+  return <PrivateRoute>{allowed ? children : <Navigate to={homeFor(user?.role)} replace />}</PrivateRoute>;
 }
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -201,7 +210,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 /** El personal entra a su panel; la ciudadanía a su tablero. */
 function HomeForRole() {
   const { user } = useAuth();
-  return isStaff(user?.role) ? <Navigate to="/panel" replace /> : <DashboardPage />;
+  return isStaff(user?.role) ? <Navigate to={homeFor(user?.role)} replace /> : <DashboardPage />;
 }
 
 export default function App() {
@@ -224,7 +233,9 @@ export default function App() {
           <Route path="/panel" element={<StaffRoute><StaffDashboardPage /></StaffRoute>} />
           <Route path="/panel/incidencias" element={<StaffRoute><IncidentsQueuePage /></StaffRoute>} />
           <Route path="/panel/incidencias/:id" element={<StaffRoute><IncidentDetailPage /></StaffRoute>} />
-          <Route path="/panel/equipo" element={<StaffRoute supervisor><TeamPage /></StaffRoute>} />
+          <Route path="/panel/equipo" element={<StaffRoute need="supervisor"><TeamPage /></StaffRoute>} />
+          <Route path="/cuadrilla" element={<StaffRoute need="crew"><CrewOrdersPage /></StaffRoute>} />
+          <Route path="/cuadrilla/:id" element={<StaffRoute need="crew"><CrewOrderPage /></StaffRoute>} />
           <Route path="/admin" element={<Navigate to="/panel" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

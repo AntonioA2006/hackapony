@@ -1,6 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import CallButtons from "../shared/CallButtons";
+import { useAuth } from "../shared/auth/AuthContext";
 import { apiFetch, authHeader, getApiBase } from "../shared/api/client";
 import { CATEGORY_LABELS, FLOW_RATE_LPH, SEVERITY_LABELS } from "../shared/labels";
 import IncidentsMap from "../shared/map/IncidentsMap";
@@ -15,7 +17,80 @@ type Located = { state: { name: string }; municipality: { name: string } | null 
 
 const DEFAULT_CENTER: [number, number] = [19.4326, -99.1332];
 
+type ActiveTicket = {
+  email_verified: boolean;
+  active: null | {
+    public_id: string;
+    title: string;
+    status: string;
+    incident_public_id: string | null;
+    incident_status: string | null;
+    urgency_score: number | null;
+    stage: number;
+    dispatched: boolean;
+    crew_name: string | null;
+    created_at: string;
+  };
+};
+
+const STAGES = ["Emitido", "Validado por operador", "Atendido por cuadrilla"];
+
+function TicketTracker({ stage, dispatched, crew }: { stage: number; dispatched: boolean; crew: string | null }) {
+  return (
+    <ol className="mt-5 grid gap-3 sm:grid-cols-3">
+      {STAGES.map((label, i) => {
+        const done = i + 1 < stage || (i + 1 === stage && i === 0);
+        const current = i + 1 === stage && i > 0;
+        return (
+          <li key={label} className={`anim-fade rounded-card border p-3 ${done ? "border-ok/40 bg-ok/5" : current ? "border-cyan/40 bg-sky/40" : "border-line bg-card"}`} style={{ animationDelay: `${i * 80}ms` }}>
+            <p className="text-[11px] uppercase tracking-[0.025em] text-warm">Etapa {i + 1}</p>
+            <p className="mt-0.5 font-medium text-ink">
+              {done ? "✓ " : current ? "● " : ""}
+              {label}
+            </p>
+            {i === 1 && current && <p className="text-[12px] text-warm">{dispatched ? `Cuadrilla en camino${crew ? `: ${crew}` : ""}` : "Despacho revisó tu reporte"}</p>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function VerifyGate() {
+  const { checkEmailVerified, resendVerification } = useAuth();
+  const qc = useQueryClient();
+  const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <div className="mx-auto max-w-xl space-y-5">
+      <PageHeader title={<>Verifica tu <span className="highlight">correo</span></>} lead="Para evitar reportes falsos, solo las cuentas verificadas pueden reportar y subir fotografías." />
+      <Notice>Abre el enlace que te enviamos al registrarte (revisa también spam o promociones) y vuelve aquí.</Notice>
+      {msg && <Notice tone="success">{msg}</Notice>}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="primary"
+          onClick={() =>
+            void checkEmailVerified().then((ok) => {
+              if (ok) void qc.invalidateQueries({ queryKey: ["active-report"] });
+              else setMsg("Todavía no aparece verificado. Abre el enlace del correo e inténtalo de nuevo.");
+            })
+          }
+        >
+          Ya lo verifiqué
+        </Button>
+        <Button onClick={() => void resendVerification().then(() => setMsg("Te enviamos un enlace nuevo."))}>Reenviar correo</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ReportPage() {
+  const qc = useQueryClient();
+  const { mode, emailVerified } = useAuth();
+  const ticket = useQuery({
+    queryKey: ["active-report"],
+    queryFn: () => apiFetch<ActiveTicket>("/users/me/active-report"),
+    refetchInterval: 30_000,
+  });
   const { region } = useRegion();
   const states = useStates();
   const municipalities = useMunicipalities(region.cve_ent);
@@ -28,6 +103,7 @@ export default function ReportPage() {
   const [category, setCategory] = useState("leak_public_road");
   const [severity, setSeverity] = useState("medium");
   const [flow, setFlow] = useState<string | null>(null);
+  const [phone, setPhone] = useState("");
   const [point, setPoint] = useState<[number, number] | null>(null);
   const [address, setAddress] = useState("");
   // La dirección se autocompleta desde el punto mientras la persona no la edite a mano
@@ -67,6 +143,7 @@ export default function ReportPage() {
     description: validateLength(description, 10, 2000, "Descripción"),
     address: address.trim().length > 200 ? "Referencia: máximo 200 caracteres." : undefined,
     photos: validatePhotos(photos),
+    phone: phone && phone.replace(/\D/g, "").length !== 10 ? "El teléfono debe tener 10 dígitos (p. ej. 443 128 4902)." : undefined,
     point: !point
       ? "Marca en el mapa el lugar del problema o usa tu ubicación."
       : inside === false || located.isError
@@ -175,6 +252,7 @@ export default function ReportPage() {
           longitude: point[1],
           address_reference: address || null,
           leak_flow: flow,
+          contact_phone: phone.replace(/\D/g, "") || null,
         }),
       });
       let failed = 0;
@@ -190,12 +268,44 @@ export default function ReportPage() {
       }
       if (failed) setPhotoWarn(`${failed} foto(s) no se pudieron subir (formato o tamaño no válido).`);
       setCreated(report);
+      void qc.invalidateQueries({ queryKey: ["active-report"] });
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBusy(false);
     }
   };
+
+  const verified = ticket.data ? ticket.data.email_verified : mode !== "firebase" || emailVerified;
+  if (!created && ticket.data && !verified) return <VerifyGate />;
+  const active = ticket.data?.active;
+  if (!created && active) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-5">
+        <PageHeader
+          title={<>Tu reporte <span className="highlight">{active.public_id}</span> sigue activo</>}
+          lead="Solo puedes tener un reporte activo a la vez. Podrás crear otro cuando la cuadrilla lo marque como atendido."
+        />
+        <section className="rounded-card border border-line bg-card p-5 shadow-card">
+          <p className="font-medium text-ink">{active.title}</p>
+          <p className="text-[13px] text-warm">
+            Emitido el {new Date(active.created_at).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}
+            {active.urgency_score != null ? ` · Índice de urgencia ${active.urgency_score.toFixed(0)}/100` : ""}
+          </p>
+          <TicketTracker stage={active.stage} dispatched={active.dispatched} crew={active.crew_name} />
+        </section>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/mis-reportes" className="press inline-flex min-h-[44px] items-center rounded-full border border-cyan-edge bg-cyan px-4 font-medium text-white">
+            Ver mis reportes
+          </Link>
+        </div>
+        <section>
+          <p className="text-[13px] text-warm">¿La fuga empeoró o hay riesgo para personas?</p>
+          <CallButtons />
+        </section>
+      </div>
+    );
+  }
 
   if (created) {
     return (
@@ -321,6 +431,24 @@ export default function ReportPage() {
               maxLength={200}
               placeholder={reverseBusy ? "Buscando la dirección del punto…" : "Calle, número, colonia, entre calles"}
               {...fieldA11y("rep-addr", show("address"))}
+            />
+          </Field>
+          <Field
+            label="Teléfono de contacto (opcional)"
+            hint="Solo lo ven el operador y la cuadrilla asignada, por si necesitan llamarte para ubicar la fuga."
+            error={show("phone")}
+            htmlFor="rep-phone"
+          >
+            <input
+              className="field"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel-national"
+              maxLength={14}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/[^\d ]/g, ""))}
+              placeholder="443 128 4902"
+              {...fieldA11y("rep-phone", show("phone"))}
             />
           </Field>
           <Field
