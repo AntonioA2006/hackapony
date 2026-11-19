@@ -10,6 +10,7 @@
 ```sql
 CREATE INDEX reports_location_gix ON reports USING GIST (location);
 CREATE INDEX incidents_centroid_gix ON incidents USING GIST (centroid);
+CREATE INDEX incidents_public_location_gix ON incidents USING GIST (public_location);
 CREATE INDEX census_areas_geom_gix ON census_areas USING GIST (geom);
 CREATE INDEX municipalities_geom_gix ON municipalities USING GIST (geom);
 ```
@@ -35,12 +36,16 @@ LIMIT :limit;
 
 ```sql
 SELECT i.id, i.public_id, i.urgency_score, i.priority_band,
-       ST_Y(i.centroid::geometry) AS lat,
-       ST_X(i.centroid::geometry) AS lon
+       ST_Y(i.public_location::geometry) AS lat,
+       ST_X(i.public_location::geometry) AS lon
 FROM incidents i
-WHERE i.status <> 'dismissed'
-  AND i.centroid && ST_MakeEnvelope(:xmin, :ymin, :xmax, :ymax, 4326)::geography;
+WHERE i.status NOT IN ('dismissed', 'resolved')
+  AND i.public_location && ST_MakeEnvelope(:xmin, :ymin, :xmax, :ymax, 4326)::geography
+ORDER BY i.urgency_score DESC
+LIMIT 200;
 ```
+
+El `&&` va sobre `public_location` (no sobre el centroide) para que el índice GiST aplique y para que encoger el bbox no revele el punto real. Ver ADR-016.
 
 ### Asignación AGEB
 

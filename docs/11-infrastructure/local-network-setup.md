@@ -94,7 +94,7 @@ New-NetFirewallRule -DisplayName "Agua Alerta Vite (5173)" -Direction Inbound `
 
 ## Causa habitual de `Failed to fetch` en el mapa
 
-El componente `MapPage` llama `GET /incidents/public` vía `apiFetch`. El mapa Leaflet/OSM suele cargar bien; el fallo casi siempre es la **petición a la API**:
+El componente `MapPage` llama `GET /incidents/public?bbox=…&page_size=200` (viewport, con debounce) vía `apiFetch`. Sin `bbox` la ruta sigue respondiendo, con tope de 200. El mapa Leaflet suele cargar bien; el fallo casi siempre es la **petición a la API**:
 
 1. Bundle con `http://localhost:8000/api/v1` abierto desde otro dispositivo (`localhost` = ese dispositivo).
 2. Vite en LAN sin CORS para `http://<IP>:5173`.

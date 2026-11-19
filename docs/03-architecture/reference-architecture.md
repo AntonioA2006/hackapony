@@ -289,13 +289,17 @@ El mapa público es el endpoint más consultado y el más expuesto. Se separa de
 - `Cache-Control: public, max-age=30` + `ETag`; el proxy absorbe picos (un municipio entero abriendo el mapa tras una noticia).
 - Fase 3, si se superan ~20k incidencias visibles: vector tiles con `ST_AsMVT`.
 
-### 8.2 Ofuscación de ubicación (decisión pendiente → se cierra)
+**D5 (hecho, sin renombrar la ruta).** El mapa llama `GET /api/v1/incidents/public?bbox=minLon,minLat,maxLon,maxLat`. El filtro usa `incidents.public_location` y el índice GiST `incidents_public_location_gix` (migración `005`), no el centroide. Cada respuesta trae como máximo 200 incidencias (las de mayor urgencia); sin `bbox` el mismo tope aplica, para no romper clientes viejos. El viewport se recorta a la zona de operación y se pide con debounce de 300 ms, cancelando la petición anterior. Clusters por `zoom`, ETag y la vista materializada siguen pendientes: con el índice y el tope el mapa nacional no necesita ese read model todavía.
 
-Se adopta jitter **determinista**: `public_location = snap a una malla de ~30 m + desplazamiento derivado de HMAC(secret, incident_id)`. Si fuera aleatorio por request, promediar varias consultas revelaría la ubicación exacta. Se calcula una vez al crear/mover la incidencia. Las fugas en vía pública no requieren más precisión para el ciudadano; el admin ve la ubicación real.
+### 8.2 Ofuscación de ubicación (cerrada en D5, ADR-016)
 
-### 8.3 Visibilidad en mapa público (decisión pendiente → se cierra)
+`public_location = snap a una malla de 0.00027° (~30 m de latitud) + desplazamiento dentro de la celda derivado de HMAC-SHA256(LOCATION_HMAC_SECRET, id)`. El resultado se redondea a 6 decimales y se guarda al crear la incidencia y cada vez que se recalcula el centroide. Si el jitter fuera aleatorio por request, promediar consultas revelaría el punto real; si el offset fuera una función pública del id, restarlo devolvería el centro de la celda. El admin y el dueño del reporte ven la ubicación real. `GET /reports/nearby` aplica la misma función (clave: id del reporte) porque es público y no autenticado. Rotar el secreto no reescribe filas ya guardadas: hay que recalcular el centroide o volver a correr el backfill.
+
+### 8.3 Visibilidad en mapa público (decisión pendiente)
 
 Se muestra una incidencia en cuanto tiene **≥ 1 reporte en `under_review` o `validated`**, con badge "sin validar" si ninguno está validado. Las incidencias con un único reporte de una cuenta de menos de 24 h **no** se publican hasta validación. Equilibra utilidad (la gente ve que su reporte "existe") contra abuso (cuentas recién creadas sembrando el mapa).
+
+D5 no cambia esta regla: el código sigue exigiendo al menos un reporte en `validated`.
 
 ### 8.4 Fotografías
 
@@ -404,7 +408,7 @@ Backups: PITR del proveedor + `pg_dump` lógico diario a otro proveedor/región;
 | ADR-013 | Agrupamiento síncrono con advisory locks y ancla fija | Propuesta |
 | ADR-014 | Proveedor de tiles para staging/producción | Propuesta |
 | ADR-015 | Refresh token opaco en cookie HttpOnly con rotación | Propuesta |
-| ADR-016 | Ubicación pública con jitter determinista (HMAC) | Propuesta |
+| ADR-016 | Ubicación pública con jitter determinista (HMAC) | Aceptada (D5) |
 | ADR-017 | Urgencia persistida con desglose y versión de política | Propuesta |
 | ADR-018 | Seudonimización ARCO compatible con inmutabilidad de reportes (enmienda ADR-003) | Propuesta |
 
@@ -456,7 +460,7 @@ Revisión de `backend/` y `frontend/` en `main` (`43818b0`). Leyenda: ✅ cumple
 | D9 | **Crítica** · ✅ corregido | `link_report_to_incident()` | **Encontrado al escribir los tests:** la sesión usa `autoflush=False`, así que `recalc_centroid` no veía el reporte recién vinculado. `report_count`, el centroide y la gravedad agregada **nunca se actualizaban** al agrupar; el factor C de la urgencia quedaba congelado en 1 reporte | `db.flush()` antes de recalcular; recálculo en una sola consulta (`ST_Centroid(ST_Collect(...))`, que también resuelve D7) |
 | D3 | Media · ✅ corregido | `confirm_incident()` en `app/api/v1/incidents.py` | **Confirmado con test:** doble clic simultáneo → 500; 8 confirmaciones simultáneas → solo 2 contadas | `SELECT … FOR UPDATE` de la incidencia, `INSERT … ON CONFLICT DO NOTHING` y `UPDATE` atómico del contador. Tests `test_concurrent_confirmations_are_all_counted`, `test_double_click_confirmation_returns_409_not_500` |
 | D4 | Media | `app/main.py:43` | El handler global devuelve 500 **sin registrar la excepción** y con `request_id: null` | `logger.exception(...)` + middleware de `request_id` |
-| D5 | Media | `app/api/v1/incidents.py:55` | El mapa público no filtra por `bbox`, publica el centroide exacto e incluye incidencias sin ningún reporte validado | Endpoint `/public/incidents?bbox=&zoom=` sobre read model con `public_location` (§8) |
+| D5 | Media · ✅ corregido | `GET /incidents/public`, `IncidentsMap` / `MapPage` | El mapa pedía el listado completo y la respuesta traía el centroide exacto. (Exigir un reporte `validated` ya estaba.) | `bbox` validado, índice GiST sobre `public_location` (migración 005), snap ~30 m + HMAC, tope de 200. El mapa pide el viewport con debounce y cancela la petición anterior. Tests `test_public_geo.py`, `test_public_incidents.py` |
 | D6 | Baja | `incidents.py:171`, `:180` | Notifica una vez por reporte: un usuario con 2 reportes recibe 2 avisos; N+1 consultas | Notificar a `DISTINCT user_id` y mover el envío al outbox |
 | D7 | Baja · ✅ corregido | `recalc_centroid()` | Hacía una consulta por reporte (N+1) | Una sola consulta con `ST_Centroid(ST_Collect(location::geometry))` |
 | D8 | Baja | `docker-compose.yml` | Postgres expuesto en `5432` del host, `--reload` y código montado como volumen: válido para dev, no debe llegar a staging | `compose.override.yml` solo para dev |
@@ -474,5 +478,5 @@ Revisión de `backend/` y `frontend/` en `main` (`43818b0`). Leyenda: ✅ cumple
 1. ~~**D1, D2, D3, D9, H1**: correctitud de datos~~ ✅ corregidos, con tests de integración en `backend/tests/test_grouping_integrity.py`.
 2. **H8, H6, H10, D4**: seguridad y operabilidad mínimas antes de exponerlo a ciudadanos reales.
 3. **H7, D8, H9**: separar configuración de dev y de staging.
-4. **H2, H3, H13, D5**: migración 002 (`anchor_location`, `public_location`, desglose de urgencia, idempotencia) y read model público.
+4. **H2, H3, H13**: `anchor_location`, desglose de urgencia e idempotencia. **D5** ✅ (`public_location` en migración 005, bbox y tope en `/incidents/public`).
 5. Reorganizar el backend por módulos (§4) de forma incremental, empezando por extraer `territory`.

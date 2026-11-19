@@ -55,7 +55,7 @@ export default function HomePage() {
         </div>
 
         <div className="mt-14 rounded-feature bg-card p-2 shadow-float">
-          <IncidentsMap regions={geo.data} className="h-[420px]" />
+          <IncidentsMap regions={geo.data} className="h-[260px] sm:h-[420px]" />
         </div>
       </section>
 

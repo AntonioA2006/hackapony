@@ -129,8 +129,12 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
 
   const url = `${getApiBase()}${path}`;
+  const callerSignal = options.signal;
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  callerSignal?.addEventListener("abort", abortFromCaller);
+  if (callerSignal?.aborted) controller.abort();
   const authRetry =
     !path.startsWith("/auth/login") &&
     !path.startsWith("/auth/register") &&
@@ -156,6 +160,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
   } catch (e) {
+    if (callerSignal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
     if (e instanceof Error && e.name === "AbortError") {
       throw new ApiConnectionError(CONNECT_HELP, e);
     }
@@ -168,5 +175,6 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     throw e;
   } finally {
     window.clearTimeout(timeoutId);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
 }

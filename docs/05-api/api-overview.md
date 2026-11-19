@@ -3,9 +3,9 @@
 - **Base URL:** `/api/v1`
 - **Formato:** JSON UTF-8; fechas ISO-8601 UTC (`timestamptz`).
 - **Auth:** `Authorization: Bearer <access_token>` salvo rutas públicas indicadas.
-- **Paginación:** `?page=1&page_size=20` (máx 100).
+- **Paginación:** `?page=1&page_size=20` (máx 100 en listados autenticados). `GET /incidents/public` tiene tope propio de 200.
 - **Ordenamiento:** `?sort=-created_at` (prefijo `-` descendente).
-- **Filtros geográficos:** `bbox=minLon,minLat,maxLon,maxLat` o `lat`, `lon`, `radius_m`.
+- **Filtros geográficos:** `bbox=minLon,minLat,maxLon,maxLat` o `lat`, `lon`, `radius_m`. En el mapa público el bbox se valida (orden, rangos, máximo 50° × 40°) y se aplica sobre la ubicación ofuscada.
 
 ## Respuesta estándar éxito (lista)
 

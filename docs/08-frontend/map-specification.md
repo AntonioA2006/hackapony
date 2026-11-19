@@ -22,7 +22,7 @@ Texto OSM © contribuidores visible según licencia ODbL.
 
 - Click pin → popup con folio, categoría, estado, urgencia.
 - Doble click mapa en modo edición → mueve pin.
-- Bbox fetch al mover mapa (debounce 300 ms).
+- Bbox fetch al mover mapa (debounce 300 ms, petición anterior cancelada). El cliente recorta el viewport a la zona de operación antes de llamar a `GET /incidents/public?bbox=…&page_size=200`. Los marcadores usan la coordenada ofuscada (~30 m).
 
 ## Iconografía
 
