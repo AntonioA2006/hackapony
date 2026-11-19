@@ -18,7 +18,8 @@ const STATUS_OPTIONS = [
 
 export default function IncidentsQueuePage() {
   const [params, setParams] = useSearchParams();
-  const status = params.get("status") ?? "active";
+  const queue = params.get("queue") ?? "";
+  const status = params.get("status") ?? (queue ? "" : "active");
   const assigned = params.get("assigned") ?? "";
   const band = params.get("band") ?? "";
   const cveEnt = params.get("cve_ent") ?? "";
@@ -34,7 +35,8 @@ export default function IncidentsQueuePage() {
   };
 
   const q = new URLSearchParams({ page: String(page), page_size: "20" });
-  if (status) q.set("status", status);
+  if (queue) q.set("queue", queue);
+  else if (status) q.set("status", status);
   if (assigned) q.set("assigned", assigned);
   if (band) q.set("band", band);
   if (cveEnt) q.set("cve_ent", cveEnt);
@@ -47,12 +49,33 @@ export default function IncidentsQueuePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={<>Cola de <span className="highlight">incidencias</span></>} lead="Ordenadas por urgencia. Abre una ficha para ver reportes, fotos y atenderla." />
+      <PageHeader title={<>Cola de <span className="highlight">incidencias</span></>} lead="Primero se valida el reporte. Cuando la cuadrilla lo resuelve, queda en por verificar hasta que confirmes el cierre." />
+
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Secciones del operador">
+        {(
+          [
+            ["validate", "Por validar"],
+            ["verify", "Por verificar"],
+            ["", "Toda la cola"],
+          ] as const
+        ).map(([value, name]) => (
+          <button
+            key={name}
+            type="button"
+            role="tab"
+            aria-selected={queue === value}
+            className={`press rounded-full border px-4 py-2 text-body ${queue === value ? "border-soot bg-soot text-white" : "border-line bg-card text-ink"}`}
+            onClick={() => set("queue", value)}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
 
       <div className="grid gap-3 rounded-card border border-line bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label>
-          <span className="label">Estado</span>
-          <select className="field" value={status} onChange={(e) => set("status", e.target.value)}>
+        <label className={queue ? "opacity-50" : ""}>
+          <span className="label">Estado del caso</span>
+          <select className="field" value={status} disabled={Boolean(queue)} onChange={(e) => set("status", e.target.value)}>
             {STATUS_OPTIONS.map(([v, l]) => (
               <option key={l} value={v}>
                 {l}

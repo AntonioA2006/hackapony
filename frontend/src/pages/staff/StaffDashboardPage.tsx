@@ -4,7 +4,7 @@ import { BarList, ChartCard, SegmentedBar, TrendChart } from "../../shared/chart
 import { BAND_LABELS, CATEGORY_LABELS, FLOW_LABELS, fmtHours, fmtLiters, label } from "../../shared/labels";
 import IncidentsMap from "../../shared/map/IncidentsMap";
 import { BAND_COLORS, INCIDENT_LEGEND, regionIncidentColor } from "../../shared/map/waterScale";
-import { useMunicipalitiesGeo, useStates, useStatesGeo } from "../../shared/region/api";
+import { useMunicipalities, useMunicipalitiesGeo, useStates, useStatesGeo } from "../../shared/region/api";
 import { isSupervisor, ROLE_LABELS } from "../../shared/roles";
 import { useDashboard, useRegionCounts } from "../../shared/staff/api";
 import QueryError from "../../shared/ui/QueryError";
@@ -15,9 +15,12 @@ const PERIODS = [7, 30, 90, 365];
 export default function StaffDashboardPage() {
   const { user } = useAuth();
   const [cveEnt, setCveEnt] = useState<string | null>(null);
+  const [cvegeo, setCvegeo] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
   const [days, setDays] = useState(30);
   const states = useStates();
-  const dash = useDashboard(cveEnt, days);
+  const municipalities = useMunicipalities(cveEnt);
+  const dash = useDashboard(cveEnt, days, cvegeo, category);
   const counts = useRegionCounts(cveEnt);
   const statesGeo = useStatesGeo();
   const munGeo = useMunicipalitiesGeo(cveEnt);
@@ -64,12 +67,41 @@ export default function StaffDashboardPage() {
 
       <div className="flex flex-wrap items-end gap-3 rounded-card border border-line bg-card p-4">
         <label className="min-w-[220px]">
-          <span className="label">Estado</span>
-          <select className="field" value={cveEnt ?? ""} onChange={(e) => setCveEnt(e.target.value || null)}>
+          <span className="label">Área · estado</span>
+          <select
+            className="field"
+            value={cveEnt ?? ""}
+            onChange={(e) => {
+              setCveEnt(e.target.value || null);
+              setCvegeo(null);
+            }}
+          >
             <option value="">Todo México</option>
             {states.data?.map((s) => (
               <option key={s.cve_ent} value={s.cve_ent}>
                 {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-[220px]">
+          <span className="label">Área · municipio</span>
+          <select className="field" value={cvegeo ?? ""} disabled={!cveEnt} onChange={(e) => setCvegeo(e.target.value || null)}>
+            <option value="">{cveEnt ? "Todo el estado" : "Elige un estado"}</option>
+            {municipalities.data?.map((m) => (
+              <option key={m.cvegeo} value={m.cvegeo}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-[220px]">
+          <span className="label">Tipo de incidencia</span>
+          <select className="field" value={category ?? ""} onChange={(e) => setCategory(e.target.value || null)}>
+            <option value="">Todas</option>
+            {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
               </option>
             ))}
           </select>
@@ -94,11 +126,12 @@ export default function StaffDashboardPage() {
 
       {dash.error && <QueryError error={dash.error} onRetry={() => void dash.refetch()} />}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {t ? (
           <>
             <Stat label="Abiertas" value={<CountUp value={t.open} />} note={`${t.unassigned} sin asignar · ${t.critical_open} críticas`} />
             <Stat label="En atención" value={<CountUp value={t.in_progress} />} note={`Mis casos abiertos: ${t.mine_open}`} />
+            <Stat label="Por verificar" value={<CountUp value={t.awaiting_verification ?? 0} />} note="La cuadrilla ya las marcó resueltas" />
             <Stat label="Resueltas" value={<CountUp value={t.resolved} />} note={`Tiempo medio: ${fmtHours(t.avg_resolution_h)} · mías: ${t.mine_resolved}`} />
             <Stat
               label="Agua perdida (estimada)"
@@ -107,7 +140,7 @@ export default function StaffDashboardPage() {
             />
           </>
         ) : (
-          [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[108px]" />)
+          [0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-[108px]" />)
         )}
       </div>
 

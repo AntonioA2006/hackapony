@@ -16,12 +16,13 @@ export type Incident = MapIncident & {
 };
 
 export type Dashboard = {
-  scope: { cve_ent: string | null; days: number };
+  scope: { cve_ent: string | null; cvegeo: string | null; category: string | null; days: number };
   totals: {
     total: number;
     open: number;
     in_progress: number;
     resolved: number;
+    awaiting_verification: number;
     dismissed: number;
     unassigned: number;
     critical_open: number;
@@ -75,13 +76,22 @@ export type IncidentDetail = {
   reports: DetailReport[];
   history: { at: string; type: string; payload: Record<string, unknown> | null; actor: string | null }[];
   photos_purged_at: string | null;
+  resolution: {
+    description: string;
+    minutes_spent: number;
+    has_photo: boolean;
+    submitted_at: string;
+    verified_at: string | null;
+  } | null;
 };
 
-export function useDashboard(cveEnt: string | null, days: number) {
+export function useDashboard(cveEnt: string | null, days: number, cvegeo: string | null = null, category: string | null = null) {
   const q = new URLSearchParams({ days: String(days) });
   if (cveEnt) q.set("cve_ent", cveEnt);
+  if (cvegeo) q.set("cvegeo", cvegeo);
+  if (category) q.set("category", category);
   return useQuery({
-    queryKey: ["staff-dashboard", cveEnt, days],
+    queryKey: ["staff-dashboard", cveEnt, cvegeo, category, days],
     queryFn: () => apiFetch<Dashboard>(`/statistics/staff-dashboard?${q}`),
     refetchInterval: 60_000,
   });

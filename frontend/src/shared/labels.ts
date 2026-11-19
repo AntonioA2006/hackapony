@@ -29,6 +29,7 @@ export const INCIDENT_STATUS_LABELS: Record<string, string> = {
   open: "Abierta",
   triaged: "Clasificada",
   in_progress: "En atención",
+  pending_verification: "Por verificar",
   resolved: "Resuelta",
   dismissed: "Descartada",
 };

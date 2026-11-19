@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { apiFetch } from "../../shared/api/client";
+import { apiFetch, authHeader, getApiBase } from "../../shared/api/client";
 import { useAuth } from "../../shared/auth/AuthContext";
 import { CATEGORY_LABELS, FLOW_LABELS, INCIDENT_STATUS_LABELS, REPORT_STATUS_LABELS, SEVERITY_LABELS, fmtLiters, label } from "../../shared/labels";
 import IncidentsMap from "../../shared/map/IncidentsMap";
-import { isSupervisor } from "../../shared/roles";
+import { isOperator, isSupervisor } from "../../shared/roles";
 import AuthImage from "../../shared/staff/AuthImage";
 import { useTechnicians, type IncidentDetail } from "../../shared/staff/api";
 import QueryError from "../../shared/ui/QueryError";
@@ -21,7 +21,34 @@ const EVENT_LABELS: Record<string, string> = {
   severity_changed: "Gravedad ajustada",
   flow_changed: "Tipo de fuga ajustado",
   reports_validated: "Reportes validados por despacho",
+  resolution_submitted: "Cuadrilla envió el cierre a verificación",
+  resolution_verified: "Operador confirmó el cierre",
 };
+
+function ResolutionPhoto({ incidentId }: { incidentId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let revoked: string | null = null;
+    void (async () => {
+      const res = await fetch(`${getApiBase()}/incidents/${incidentId}/resolution/photo`, { headers: await authHeader() });
+      if (!res.ok) return;
+      revoked = URL.createObjectURL(await res.blob());
+      setUrl(revoked);
+    })();
+    return () => {
+      if (revoked) URL.revokeObjectURL(revoked);
+    };
+  }, [incidentId]);
+  if (!url) return <p className="mt-3 text-[13px] text-warm">La foto de la reparación ya no está disponible.</p>;
+  return <img src={url} alt="Foto de la reparación, visible solo para el personal" className="mt-3 max-h-72 w-full rounded-card border border-line object-cover" />;
+}
+
+function formatMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
 
 export default function IncidentDetailPage() {
   const { id } = useParams();
@@ -56,6 +83,14 @@ export default function IncidentDetailPage() {
     },
     onError: (e) => setMsg({ tone: "error", text: (e as Error).message }),
   });
+  const verify = useMutation({
+    mutationFn: () => apiFetch(`/incidents/${id}/resolution/verify`, { method: "POST" }),
+    onSuccess: () => {
+      setMsg({ tone: "success", text: "Cierre confirmado. Se eliminó la foto de la reparación y las del reporte." });
+      refresh();
+    },
+    onError: (e) => setMsg({ tone: "error", text: (e as Error).message }),
+  });
   const review = useMutation({
     mutationFn: ({ rid, status, reason }: { rid: string; status: string; reason?: string }) =>
       apiFetch(`/reports/${rid}`, { method: "PATCH", body: JSON.stringify({ status, rejection_reason: reason }) }),
@@ -70,6 +105,8 @@ export default function IncidentDetailPage() {
   if (detail.error) return <QueryError error={detail.error} onRetry={() => void detail.refetch()} />;
   const { incident: inc, reports, history, photos_purged_at } = detail.data!;
   const closed = inc.status === "resolved" || inc.status === "dismissed";
+  const awaiting = inc.status === "pending_verification";
+  const resolution = detail.data!.resolution;
   const crews = (techs.data ?? []).filter((t) => t.role === "CUADRILLA");
 
   const close = (status: "resolved" | "dismissed") => {
@@ -158,7 +195,23 @@ export default function IncidentDetailPage() {
       {!closed && !inc.validated && (
         <Notice>Primero valida el reporte. Después podrás asignarlo a una cuadrilla.</Notice>
       )}
-      {!closed && inc.validated && (
+      {awaiting && resolution && (
+        <section className="rounded-card border border-cyan/40 bg-card p-5">
+          <h2 className="text-subheading">Por verificar</h2>
+          <p className="mt-1 text-body text-warm">
+            La cuadrilla ya lo marcó resuelto. Quien reportó ve ese estado y no puede ver esta foto. Al confirmar se cierra el caso y se borra la imagen.
+          </p>
+          <p className="mt-3 text-ink">{resolution.description}</p>
+          <p className="mt-2 text-[13px] text-warm">Tiempo empleado: {formatMinutes(resolution.minutes_spent)}</p>
+          {resolution.has_photo && id && <ResolutionPhoto incidentId={id} />}
+          {isOperator(user?.role) && (
+            <Button className="mt-4" variant="primary" disabled={verify.isPending} onClick={() => verify.mutate()}>
+              {verify.isPending ? "Confirmando…" : "Confirmar cierre"}
+            </Button>
+          )}
+        </section>
+      )}
+      {!closed && !awaiting && inc.validated && (
         <section className="anim-pop rounded-card border border-cyan/30 bg-sky/30 p-5">
           <h2 className="text-subheading">{inc.assigned_to ? "En atención por cuadrilla" : "Asignar a cuadrilla"}</h2>
           <p className="mt-1 text-body text-warm">

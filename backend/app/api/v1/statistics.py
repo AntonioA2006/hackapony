@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.domain.enums import OPERATOR_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus, UserRole
+from app.domain.enums import OPERATOR_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportCategory, ReportStatus, UserRole
 from app.models.entities import CitizenConfirmation, Incident, IncidentRating, Report
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
@@ -23,7 +23,7 @@ def public_overview(db: Session = Depends(get_db)):
         text(
             """
             SELECT count(*) FILTER (WHERE status = 'resolved') AS resolved,
-                   count(*) FILTER (WHERE status NOT IN ('resolved', 'dismissed')) AS pending,
+                   count(*) FILTER (WHERE status NOT IN ('resolved', 'dismissed', 'pending_verification')) AS pending,
                    avg(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 3600)
                      FILTER (WHERE status = 'resolved' AND closed_at IS NOT NULL) AS avg_h
             FROM incidents
@@ -137,7 +137,7 @@ def geo_distribution(
             """
             SELECT ST_X(centroid::geometry) AS lon, ST_Y(centroid::geometry) AS lat, COUNT(*) AS cnt
             FROM incidents
-            WHERE status NOT IN ('resolved','dismissed')
+            WHERE status NOT IN ('resolved','dismissed','pending_verification')
             GROUP BY ST_SnapToGrid(centroid::geometry, 0.01)
             LIMIT 500
             """
@@ -160,22 +160,35 @@ _HOURS_SQL = "LEAST(EXTRACT(EPOCH FROM (COALESCE(i.closed_at, now()) - i.opened_
 _LITERS_SQL = f"({_RATE_SQL}) * {_HOURS_SQL}"
 
 
-def _scope(cve_ent: str | None) -> tuple[str, dict]:
-    """Filtro opcional por entidad (aplica a todas las consultas del panel)."""
+def _scope(cve_ent: str | None, cvegeo: str | None = None, category: str | None = None) -> tuple[str, dict]:
+    """Filtros del panel: entidad, municipio y tipo de incidencia."""
+    clauses: list[str] = []
+    params: dict = {}
     if cve_ent:
-        return "AND m.cve_ent = :ent", {"ent": cve_ent.zfill(2)}
-    return "", {}
+        clauses.append("AND m.cve_ent = :ent")
+        params["ent"] = cve_ent.zfill(2)
+    if cvegeo:
+        clauses.append("AND m.cvegeo = :cvegeo")
+        params["cvegeo"] = cvegeo
+    if category:
+        clauses.append("AND i.primary_category::text = :category")
+        params["category"] = category
+    return " ".join(clauses), params
 
 
 @router.get("/staff-dashboard")
 def staff_dashboard(
     cve_ent: str | None = Query(None, pattern=r"^\d{1,2}$"),
+    cvegeo: str | None = Query(None, pattern=r"^\d{5}$"),
+    category: str | None = Query(None, pattern=r"^[a-z_]+$"),
     days: int = Query(30, ge=7, le=365),
     user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
-    """Métricas para técnico y supervisión. El desperdicio usa caudales de referencia (app.domain.waste)."""
-    where, params = _scope(cve_ent)
+    """Métricas para operador y supervisión. El desperdicio usa caudales de referencia (app.domain.waste)."""
+    if category and category not in {c.value for c in ReportCategory}:
+        raise HTTPException(422, detail="Tipo de incidencia no válido")
+    where, params = _scope(cve_ent, cvegeo, category)
     base = f"FROM incidents i LEFT JOIN municipalities m ON m.id = i.municipality_id WHERE TRUE {where}"
     p = {**params, "days": days, "me": str(user.id)}
 
@@ -186,13 +199,14 @@ def staff_dashboard(
                    count(*) FILTER (WHERE i.status IN ('open','triaged')) AS open,
                    count(*) FILTER (WHERE i.status = 'in_progress') AS in_progress,
                    count(*) FILTER (WHERE i.status = 'resolved') AS resolved,
+                   count(*) FILTER (WHERE i.status = 'pending_verification') AS awaiting_verification,
                    count(*) FILTER (WHERE i.status = 'dismissed') AS dismissed,
-                   count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed') AND i.assigned_to_id IS NULL) AS unassigned,
-                   count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed') AND i.priority_band = 'critical') AS critical_open,
-                   count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed') AND i.assigned_to_id = :me) AS mine_open,
+                   count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed','pending_verification') AND i.assigned_to_id IS NULL) AS unassigned,
+                   count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed','pending_verification') AND i.priority_band = 'critical') AS critical_open,
+                   count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed','pending_verification') AND i.assigned_to_id = :me) AS mine_open,
                    count(*) FILTER (WHERE i.status = 'resolved' AND i.assigned_to_id = :me) AS mine_resolved,
                    avg(EXTRACT(EPOCH FROM (i.closed_at - i.opened_at)) / 3600) FILTER (WHERE i.status = 'resolved') AS avg_resolution_h,
-                   COALESCE(sum({_LITERS_SQL}) FILTER (WHERE i.status NOT IN ('resolved','dismissed')), 0) AS liters_open,
+                   COALESCE(sum({_LITERS_SQL}) FILTER (WHERE i.status NOT IN ('resolved','dismissed','pending_verification')), 0) AS liters_open,
                    COALESCE(sum({_LITERS_SQL}) FILTER (WHERE i.status = 'resolved'), 0) AS liters_resolved
             {base}
             """
@@ -207,7 +221,7 @@ def staff_dashboard(
         f"""
         SELECT {'m.cvegeo AS id, m.name' if cve_ent else 's.cve_ent AS id, s.name'},
                count(*) AS total,
-               count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed')) AS active
+               count(*) FILTER (WHERE i.status NOT IN ('resolved','dismissed','pending_verification')) AS active
         FROM incidents i
         LEFT JOIN municipalities m ON m.id = i.municipality_id
         LEFT JOIN states s ON s.cve_ent = m.cve_ent
@@ -221,7 +235,7 @@ def staff_dashboard(
         r["name"] = r["name"] or "Sin región"
     by_category = rows(f"SELECT i.primary_category::text AS key, count(*) AS total {base} GROUP BY 1 ORDER BY 2 DESC")
     by_band = rows(
-        f"SELECT i.priority_band::text AS key, count(*) AS total {base} AND i.status NOT IN ('resolved','dismissed') GROUP BY 1"
+        f"SELECT i.priority_band::text AS key, count(*) AS total {base} AND i.status NOT IN ('resolved','dismissed','pending_verification') GROUP BY 1"
     )
     by_flow = rows(
         f"""
@@ -247,7 +261,12 @@ def staff_dashboard(
         for r in coll:
             r["liters"] = float(r["liters"])
     return {
-        "scope": {"cve_ent": cve_ent.zfill(2) if cve_ent else None, "days": days},
+        "scope": {
+            "cve_ent": cve_ent.zfill(2) if cve_ent else None,
+            "cvegeo": cvegeo,
+            "category": category,
+            "days": days,
+        },
         "totals": {k: (float(v) if k.startswith(("avg", "liters")) and v is not None else v) for k, v in totals.items()},
         "by_area": by_area,
         "by_category": by_category,
@@ -279,7 +298,7 @@ def incidents_by_region(
                    count(*) FILTER (WHERE i.priority_band = 'medium') AS medium,
                    count(*) FILTER (WHERE i.priority_band = 'low') AS low
             FROM incidents i JOIN municipalities m ON m.id = i.municipality_id
-            WHERE i.status NOT IN ('resolved','dismissed') {where}
+            WHERE i.status NOT IN ('resolved','dismissed','pending_verification') {where}
             GROUP BY 1
             """
         ),

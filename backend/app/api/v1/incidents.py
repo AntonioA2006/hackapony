@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -9,7 +9,19 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.domain.enums import CREW_ROLES, OPERATOR_ROLES, STAFF_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus
-from app.models.entities import CitizenConfirmation, Incident, IncidentHistory, IncidentRating, Municipality, Report, User
+from app.core.config import get_settings
+from app.core.storage import get_storage
+from app.models.entities import (
+    CitizenConfirmation,
+    Incident,
+    IncidentHistory,
+    IncidentRating,
+    IncidentResolution,
+    Municipality,
+    Report,
+    User,
+)
+from app.services.photo_sanitize import sanitize_photo
 from app.schemas.common import PaginatedResponse
 from app.schemas.incidents import (
     AssigneeOut,
@@ -27,6 +39,9 @@ from app.services.priority import recalculate_incident_urgency
 from app.services.public_geo import PUBLIC_PAGE_SIZE_DEFAULT, BBoxError, clamp_public_page, parse_bbox
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
+
+# Fuera del mapa y de la cola activa: cerradas, descartadas o ya entregadas por la cuadrilla.
+NOT_OPEN = (IncidentStatus.resolved, IncidentStatus.dismissed, IncidentStatus.pending_verification)
 
 
 _ROW_SQL = text(
@@ -127,7 +142,7 @@ def public_incidents(
         .distinct()
     )
     q = select(Incident).where(
-        Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
+        Incident.status.notin_(list(NOT_OPEN)),
         Incident.id.in_(validated_ids),
     )
     if cve_ent or cvegeo:
@@ -189,7 +204,7 @@ def staff_map_incidents(
         .distinct()
     )
     q = select(Incident).where(
-        Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
+        Incident.status.notin_(list(NOT_OPEN)),
         Incident.id.in_(publishable_ids),
     )
     if box:
@@ -280,7 +295,7 @@ def priority_queue(
     limit = min(max(limit, 1), 100)
     items = db.scalars(
         select(Incident)
-        .where(Incident.status.notin_([IncidentStatus.resolved, IncidentStatus.dismissed]))
+        .where(Incident.status.notin_(list(NOT_OPEN)))
         .order_by(Incident.urgency_score.desc())
         .limit(limit)
     ).all()
@@ -291,7 +306,8 @@ def priority_queue(
 def list_incidents(
     page: int = 1,
     page_size: int = 20,
-    status_filter: str | None = Query(None, alias="status", description="open,triaged,in_progress,resolved,dismissed o 'active'"),
+    status_filter: str | None = Query(None, alias="status", description="open,triaged,in_progress,pending_verification,resolved,dismissed o 'active'"),
+    queue: str | None = Query(None, pattern=r"^(validate|verify)$"),
     cve_ent: str | None = Query(None, pattern=r"^\d{1,2}$"),
     band: str | None = Query(None, pattern=r"^(low|medium|high|critical)$"),
     assigned: str | None = Query(None, pattern=r"^(me|none|any)$"),
@@ -304,8 +320,19 @@ def list_incidents(
     q = select(Incident)
     if user.role in CREW_ROLES:
         assigned = "me"
-    if status_filter == "active":
-        q = q.where(Incident.status.notin_([IncidentStatus.resolved, IncidentStatus.dismissed]))
+    if queue == "verify":
+        q = q.where(Incident.status == IncidentStatus.pending_verification)
+    elif queue == "validate":
+        pending_reports = select(Report.incident_id).where(
+            Report.incident_id.isnot(None),
+            Report.status.in_([ReportStatus.received, ReportStatus.under_review]),
+        )
+        q = q.where(
+            Incident.status.in_([IncidentStatus.open, IncidentStatus.triaged, IncidentStatus.in_progress]),
+            Incident.id.in_(pending_reports),
+        )
+    elif status_filter == "active":
+        q = q.where(Incident.status.notin_(list(NOT_OPEN)))
     elif status_filter:
         try:
             q = q.where(Incident.status.in_([IncidentStatus(s_) for s_ in status_filter.split(",")]))
@@ -383,12 +410,170 @@ def incident_detail(
         "reports": [{**dict(r), "id": str(r["id"])} for r in reports],
         "history": [dict(h) for h in history],
         "photos_purged_at": incident.photos_purged_at,
+        "resolution": _resolution_out(incident.resolution),
     }
+
+
+def _resolution_out(row: IncidentResolution | None) -> dict | None:
+    if row is None:
+        return None
+    return {
+        "description": row.description,
+        "minutes_spent": row.minutes_spent,
+        "has_photo": bool(row.storage_key),
+        "submitted_at": row.submitted_at,
+        "verified_at": row.verified_at,
+    }
+
+
+def _can_see_resolution(user, incident: Incident) -> bool:
+    if user.role in OPERATOR_ROLES:
+        return True
+    return user.role in CREW_ROLES and incident.assigned_to_id == user.id
+
+
+@router.post("/{incident_id}/resolution")
+async def submit_resolution(
+    incident_id: uuid.UUID,
+    description: str = Form(...),
+    minutes_spent: int = Form(...),
+    file: UploadFile = File(...),
+    user=Depends(require_roles(*CREW_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """La cuadrilla entrega la reparación. El ciudadano ya lo ve resuelto; el operador debe confirmarlo."""
+    incident = db.get(Incident, incident_id, with_for_update=True)
+    if not incident or incident.assigned_to_id != user.id:
+        raise HTTPException(404, detail="Incidencia no encontrada")
+    if incident.status != IncidentStatus.in_progress:
+        raise HTTPException(422, detail="Solo se puede cerrar una orden que está en atención")
+    if incident.resolution is not None:
+        raise HTTPException(409, detail="Esta orden ya se envió a verificación")
+    text_body = description.strip()
+    if len(text_body) < 10 or len(text_body) > 2000:
+        raise HTTPException(422, detail="La explicación debe tener entre 10 y 2000 caracteres")
+    if minutes_spent < 1 or minutes_spent > 10080:
+        raise HTTPException(422, detail="El tiempo empleado debe estar entre 1 minuto y 7 días")
+    settings = get_settings()
+    content = await file.read(settings.max_photo_bytes + 1)
+    if len(content) > settings.max_photo_bytes:
+        raise HTTPException(413, detail="La foto es demasiado grande")
+    clean, mime = sanitize_photo(content, settings.allowed_mime_set)
+    ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[mime]
+    storage_key = f"resolutions/{incident.id}/{uuid.uuid4()}{ext}"
+    get_storage().put(storage_key, clean, mime)
+    row = IncidentResolution(
+        incident_id=incident.id,
+        crew_user_id=user.id,
+        description=text_body,
+        minutes_spent=minutes_spent,
+        storage_key=storage_key,
+        mime_type=mime,
+        size_bytes=len(clean),
+    )
+    db.add(row)
+    old = incident.status
+    incident.status = IncidentStatus.pending_verification
+    for report in incident.reports:
+        if report.status != ReportStatus.rejected:
+            report.status = ReportStatus.resolved
+    db.add(
+        IncidentHistory(
+            incident_id=incident.id,
+            actor_user_id=user.id,
+            event_type="resolution_submitted",
+            payload={"minutes_spent": minutes_spent},
+        )
+    )
+    db.add(
+        IncidentHistory(
+            incident_id=incident.id,
+            actor_user_id=user.id,
+            event_type="status_changed",
+            payload={"from": old.value, "to": incident.status.value},
+        )
+    )
+    reporters = {r.user_id for r in incident.reports}
+    for uid in reporters:
+        notify_user(
+            db,
+            uid,
+            "incident_resolved",
+            "Incidencia resuelta",
+            f"La incidencia {incident.public_id} fue resuelta. ¡Gracias por reportar!",
+        )
+    db.commit()
+    db.refresh(incident)
+    return {"status": incident.status.value, "resolution": _resolution_out(incident.resolution)}
+
+
+@router.get("/{incident_id}/resolution/photo")
+def resolution_photo(
+    incident_id: uuid.UUID,
+    user=Depends(require_roles(*STAFF_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """Foto de la reparación. Un usuario ciudadano no puede verla."""
+    incident = db.get(Incident, incident_id)
+    row = incident.resolution if incident else None
+    if not incident or not row or not row.storage_key or not _can_see_resolution(user, incident):
+        raise HTTPException(404, detail="No encontrado")
+    data = get_storage().get(row.storage_key)
+    if data is None:
+        raise HTTPException(404, detail="Archivo no disponible")
+    return Response(content=data, media_type=row.mime_type or "image/jpeg", headers={"Cache-Control": "private, max-age=60"})
+
+
+@router.post("/{incident_id}/resolution/verify")
+def verify_resolution(
+    incident_id: uuid.UUID,
+    user=Depends(require_roles(*OPERATOR_ROLES)),
+    db: Session = Depends(get_db),
+):
+    """El operador confirma el cierre. Ahí se borra la foto de la reparación y las del reporte."""
+    incident = db.get(Incident, incident_id, with_for_update=True)
+    row = incident.resolution if incident else None
+    if not incident or not row:
+        raise HTTPException(404, detail="No hay un cierre por verificar")
+    if incident.status != IncidentStatus.pending_verification:
+        raise HTTPException(422, detail="Este caso no está pendiente de verificación")
+    if row.storage_key:
+        try:
+            get_storage().delete(row.storage_key)
+        except Exception:  # noqa: BLE001
+            pass
+        row.storage_key = None
+        row.mime_type = None
+        row.size_bytes = None
+    row.verified_at = datetime.now(UTC)
+    row.verified_by_id = user.id
+    old = incident.status
+    incident.status = IncidentStatus.resolved
+    incident.closed_at = datetime.now(UTC)
+    db.add(
+        IncidentHistory(
+            incident_id=incident.id,
+            actor_user_id=user.id,
+            event_type="resolution_verified",
+            payload={"minutes_spent": row.minutes_spent},
+        )
+    )
+    db.add(
+        IncidentHistory(
+            incident_id=incident.id,
+            actor_user_id=user.id,
+            event_type="status_changed",
+            payload={"from": old.value, "to": incident.status.value},
+        )
+    )
+    purge_incident_photos(db, incident, user.id)
+    db.commit()
+    return {"status": incident.status.value, "resolution": _resolution_out(row)}
 
 
 # Qué estados puede fijar cada rol (supervisión: todos, incluido reabrir)
 OPERATOR_STATUSES = {IncidentStatus.triaged, IncidentStatus.in_progress, IncidentStatus.dismissed}
-CREW_STATUSES = {IncidentStatus.in_progress, IncidentStatus.resolved}
+CREW_STATUSES = {IncidentStatus.in_progress}
 
 
 @router.patch("/{incident_id}", response_model=IncidentOut)
@@ -425,12 +610,16 @@ def patch_incident(
             events.append(("reports_validated", {"count": validated}))
 
     if payload.status and payload.status != old:
+        if old == IncidentStatus.pending_verification and not supervisor:
+            raise HTTPException(422, detail="Este caso está por verificar. Confirma el cierre para terminarlo.")
         if old in CLOSED_STATUSES and not supervisor:
             raise HTTPException(403, detail="Solo supervisión puede reabrir una incidencia cerrada")
         if operator and payload.status not in OPERATOR_STATUSES:
             raise HTTPException(403, detail="La atención la cierra la cuadrilla asignada (o supervisión)")
+        if crew and payload.status == IncidentStatus.resolved:
+            raise HTTPException(422, detail="Para darla por resuelta envía la foto, la explicación y el tiempo empleado.")
         if crew and payload.status not in CREW_STATUSES:
-            raise HTTPException(403, detail="La cuadrilla solo puede marcar en atención o atendida")
+            raise HTTPException(403, detail="La cuadrilla solo actualiza órdenes que tiene en atención")
         incident.status = payload.status
         if payload.status in CLOSED_STATUSES:
             incident.closed_at = datetime.now(UTC)
