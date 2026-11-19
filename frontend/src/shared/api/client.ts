@@ -1,4 +1,54 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+const DEFAULT_LOCAL = "http://localhost:8000/api/v1";
+
+/** Resuelve la base de la API según el host del navegador (evita localhost en dispositivos LAN). */
+export function getApiBase(): string {
+  const env = import.meta.env.VITE_API_BASE_URL as string | undefined;
+
+  if (typeof window === "undefined") {
+    return env || DEFAULT_LOCAL;
+  }
+
+  const { hostname, port, protocol, host } = window.location;
+  const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1";
+
+  if (env?.startsWith("/")) {
+    return env;
+  }
+
+  if (env && !env.includes("localhost") && !env.includes("127.0.0.1")) {
+    return env.replace(/\/$/, "");
+  }
+
+  const gatewayPorts = new Set(["", "80", "3080", "8081"]);
+  if (gatewayPorts.has(port)) {
+    return `${protocol}//${host}/api/v1`;
+  }
+
+  if (port === "5173") {
+    if (isLocalHost) {
+      return (env || DEFAULT_LOCAL).replace(/\/$/, "");
+    }
+    return `${protocol}//${hostname}:8000/api/v1`;
+  }
+
+  if (env?.includes("localhost") || env?.includes("127.0.0.1")) {
+    if (!isLocalHost) {
+      return `${protocol}//${host}/api/v1`;
+    }
+  }
+
+  return (env || DEFAULT_LOCAL).replace(/\/$/, "");
+}
+
+export class ApiConnectionError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "ApiConnectionError";
+    this.cause = cause;
+  }
+}
 
 export type Tokens = {
   access_token: string;
@@ -19,6 +69,11 @@ export function clearTokens() {
   localStorage.removeItem("refresh_token");
 }
 
+const CONNECT_HELP =
+  "No se pudo conectar con el servidor. Verifica que Agua Alerta esté ejecutándose y que estés conectado a la misma red.";
+
+const FETCH_TIMEOUT_MS = 30_000;
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
@@ -26,11 +81,35 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.detail || err?.error?.message || res.statusText);
+
+  const url = `${getApiBase()}${path}`;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, { ...options, headers, signal: controller.signal });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err?.detail || err?.error?.message || res.statusText;
+      if (import.meta.env.DEV) {
+        console.warn("[apiFetch]", res.status, path, msg);
+      }
+      throw new Error(typeof msg === "string" ? msg : "No fue posible completar la solicitud.");
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new ApiConnectionError(CONNECT_HELP, e);
+    }
+    if (e instanceof TypeError || (e instanceof Error && e.message === "Failed to fetch")) {
+      if (import.meta.env.DEV) {
+        console.error("[apiFetch] conexión fallida", { url, path, base: getApiBase() });
+      }
+      throw new ApiConnectionError(CONNECT_HELP, e);
+    }
+    throw e;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
 }

@@ -21,13 +21,32 @@ cd frontend && npm run dev
 ```
 
 - API: http://localhost:8000/docs
-- Web (Docker): http://localhost:8081
-- Web (dev): http://localhost:5173
+- **Web equipo (nginx, LAN):** http://\<tu-IP\>:3080 — un solo puerto; API bajo `/api/v1`, docs en `/docs`
+- Web (Docker local): http://localhost:3080 o http://localhost:8081
+- Web (dev Vite): http://localhost:5173 — define `VITE_API_BASE_URL=http://localhost:8000/api/v1`
 
-Usuarios de desarrollo sintéticos (ver `seed_dev.py`).
+Documentación detallada: [docs/11-infrastructure/local-network-setup.md](docs/11-infrastructure/local-network-setup.md).
+
+### Pruebas en equipo (Windows)
+
+Con Docker Desktop en marcha:
+
+```powershell
+.\scripts\team-up.ps1
+```
+
+Comparte la URL `http://10.x.x.x:3080` que imprime el script (misma red Wi‑Fi). Si el firewall bloquea, permite entrante TCP **3080**.
+
+Usuarios de demo: `ciudadano@example.com` / `Ciudadano123!`, `admin@example.com` / `Admin12345!`, `super@example.com` / `Super12345!` (`team-up.ps1` ejecuta el seed; incluye incidencia **AA-LANDEM1** en el mapa).
+
+Verificación rápida: `.\scripts\verify-lan.ps1`. Firewall (admin): `.\scripts\firewall-lan.ps1`.
+
+**Mapa público:** solo incidencias con al menos un reporte **validado** por admin.
 
 ## Pruebas
 
 ```bash
 cd backend && pytest tests/test_priority.py -q
 ```
+
+INEGI E2E (wscatgeo en vivo): `.\scripts\inegi-e2e.ps1` — ver [docs/10-testing/inegi-e2e.md](docs/10-testing/inegi-e2e.md).

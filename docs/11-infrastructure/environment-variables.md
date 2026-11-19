@@ -11,6 +11,9 @@
 | `JWT_REFRESH_TTL_DAYS` | No | Default 7 |
 | `PHOTOS_PATH` | Sí | Ruta volumen fotos |
 | `CORS_ORIGINS` | Sí | CSV orígenes |
+| `CORS_ORIGIN_REGEX` | No | Regex orígenes LAN (ver defaults en `config.py`) |
+| `HOST` / `PORT` | No | Referencia; uvicorn `0.0.0.0:8000` en Docker |
+| `DOCKER_WEB_API_BASE_URL` | Build web | Debe ser `/api/v1` |
 | `GROUPING_DISTANCE_M` | No | Default 75 |
 | `DUPLICATE_SUGGEST_RADIUS_M` | No | Default 50 |
 | `PRIORITY_POP_REF` | No | Default 5000 |
@@ -20,7 +23,7 @@
 
 | Variable | Descripción |
 |----------|-------------|
-| `VITE_API_BASE_URL` | URL API pública |
+| `VITE_API_BASE_URL` | Solo en `frontend/.env.local` (dev Vite); no usar `localhost` para LAN |
 
 ## DB
 

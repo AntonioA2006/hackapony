@@ -30,6 +30,9 @@ export default function LoginPage() {
         Entrar
       </button>
       <p className="text-sm">
+        <Link to="/recuperar">Olvidé mi contraseña</Link>
+      </p>
+      <p className="text-sm">
         ¿Sin cuenta? <Link to="/registro">Regístrate</Link>
       </p>
     </form>

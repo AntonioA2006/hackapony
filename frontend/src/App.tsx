@@ -3,7 +3,9 @@ import { useAuth } from "./shared/auth/AuthContext";
 import AdminPage from "./pages/AdminPage";
 import DashboardPage from "./pages/DashboardPage";
 import HomePage from "./pages/HomePage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import MapPage from "./pages/MapPage";
 import MyReportsPage from "./pages/MyReportsPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -61,6 +63,8 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/mapa" element={<MapPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/recuperar" element={<ForgotPasswordPage />} />
+        <Route path="/restablecer" element={<ResetPasswordPage />} />
         <Route path="/registro" element={<RegisterPage />} />
         <Route
           path="/reportar"

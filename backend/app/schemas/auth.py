@@ -49,3 +49,17 @@ class UserOut(BaseModel):
 class AuthResponse(BaseModel):
     user: UserOut
     tokens: TokenResponse
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=16, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordResetAccepted(BaseModel):
+    message: str
+    dev_reset_token: str | None = None

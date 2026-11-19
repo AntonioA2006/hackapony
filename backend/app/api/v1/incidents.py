@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.domain.enums import IncidentStatus, UserRole
-from app.models.entities import CitizenConfirmation, Incident, IncidentHistory
+from app.domain.enums import IncidentStatus, ReportStatus, UserRole
+from app.models.entities import CitizenConfirmation, Incident, IncidentHistory, Report
 from app.schemas.common import PaginatedResponse
 from app.schemas.incidents import ConfirmResponse, IncidentOut, IncidentPatch, PublicIncidentOut
 from app.services.notifications import notify_user
@@ -59,7 +59,18 @@ def public_incidents(
     db: Session = Depends(get_db),
 ):
     page_size = min(max(page_size, 1), 100)
-    q = select(Incident).where(Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]))
+    validated_incident_ids = (
+        select(Report.incident_id)
+        .where(
+            Report.incident_id.isnot(None),
+            Report.status == ReportStatus.validated,
+        )
+        .distinct()
+    )
+    q = select(Incident).where(
+        Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
+        Incident.id.in_(validated_incident_ids),
+    )
     total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
     items_db = db.scalars(q.order_by(Incident.urgency_score.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     return PaginatedResponse(

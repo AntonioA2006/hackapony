@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../shared/api/client";
-import IncidentsMap from "../shared/map/IncidentsMap";
 import { useAuth } from "../shared/auth/AuthContext";
+import IncidentsMap from "../shared/map/IncidentsMap";
+import QueryError from "../shared/ui/QueryError";
 
 type Paginated<T> = { items: T[] };
 
 export default function MapPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["public-incidents"],
     queryFn: () => apiFetch<Paginated<Parameters<typeof IncidentsMap>[0]["incidents"][0]>>("/incidents/public?page_size=100"),
+    retry: 1,
   });
 
   const confirmMut = useMutation({
@@ -18,13 +20,15 @@ export default function MapPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["public-incidents"] }),
   });
 
-  if (isLoading) return <p>Cargando mapa…</p>;
-  if (error) return <p className="text-red-600">{(error as Error).message}</p>;
-
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Mapa de incidencias</h1>
-      <IncidentsMap incidents={data?.items ?? []} />
+      {isLoading && <p className="text-slate-600">Cargando incidencias…</p>}
+      {error && <QueryError error={error} context="map" onRetry={() => void refetch()} />}
+      {!error && (
+        <IncidentsMap incidents={data?.items ?? []} />
+      )}
+      {isFetching && !isLoading && <p className="text-xs text-slate-500">Actualizando…</p>}
       {user && (
         <ul className="space-y-2 text-sm">
           {(data?.items ?? []).slice(0, 10).map((inc) => (

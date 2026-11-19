@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agua_secret}
       POSTGRES_DB: ${POSTGRES_DB:-agua_alerta}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,6 +21,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agua}:${POSTGRES_PASSWORD:-agua_secret}@db:5432/${POSTGRES_DB:-agua_alerta}
+      PASSWORD_RESET_DEV_EXPOSE_TOKEN: ${PASSWORD_RESET_DEV_EXPOSE_TOKEN:-true}
     ports:
       - "8000:8000"
     volumes:
@@ -37,8 +38,9 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: http://localhost:8000/api/v1
+        VITE_API_BASE_URL: ${DOCKER_WEB_API_BASE_URL:-/api/v1}
     ports:
+      - "3080:80"
       - "8081:80"
     depends_on:
       - api

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "react-router-dom";
 import { apiFetch } from "../shared/api/client";
@@ -52,8 +53,17 @@ export default function AdminPage() {
     reject.mutate({ id, reason: reason.trim() });
   };
 
-  const importInegi = useMutation({
-    mutationFn: () => apiFetch("/inegi/import/wscatgeo/09", { method: "POST" }),
+  const [cveEnt, setCveEnt] = useState("09");
+  const [cveMun, setCveMun] = useState("002");
+
+  const importMun = useMutation({
+    mutationFn: () => apiFetch(`/inegi/import/wscatgeo/${cveEnt}/municipalities`, { method: "POST" }),
+  });
+  const importAgebMun = useMutation({
+    mutationFn: () => apiFetch(`/inegi/import/wscatgeo/${cveEnt}/${cveMun}/ageb`, { method: "POST" }),
+  });
+  const relink = useMutation({
+    mutationFn: () => apiFetch("/inegi/relink-territorial", { method: "POST" }),
   });
 
   return (
@@ -113,25 +123,33 @@ export default function AdminPage() {
         </ul>
       </section>
       {user?.role === "SUPERADMINISTRADOR" && (
-        <section>
-          <h2 className="text-lg font-medium">Datos INEGI</h2>
-          <p className="mb-2 text-sm text-slate-600">
-            Importación real desde wscatgeo (entidad 09 CDMX). No usa datos ficticios.
+        <section className="space-y-3 rounded border bg-white p-4">
+          <h2 className="text-lg font-medium">Datos INEGI (oficiales)</h2>
+          <p className="text-sm text-slate-600">
+            Orden recomendado: municipios → AGEB por municipio → relink territorial. Datos en vivo desde wscatgeo.
           </p>
-          <button
-            type="button"
-            disabled={importInegi.isPending}
-            className="rounded bg-slate-800 px-3 py-2 text-white"
-            onClick={() => importInegi.mutate()}
-          >
-            Importar municipios INEGI (cve_ent=09)
-          </button>
-          {importInegi.isSuccess && importInegi.data != null && (
-            <pre className="mt-2 rounded bg-slate-100 p-2 text-xs">
-              {JSON.stringify(importInegi.data as object, null, 2)}
-            </pre>
+          <div className="flex flex-wrap gap-2">
+            <input className="w-20 rounded border p-2" value={cveEnt} onChange={(e) => setCveEnt(e.target.value)} placeholder="ent" />
+            <input className="w-24 rounded border p-2" value={cveMun} onChange={(e) => setCveMun(e.target.value)} placeholder="mun" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={importMun.isPending} className="rounded bg-slate-800 px-3 py-2 text-white" onClick={() => importMun.mutate()}>
+              1. Municipios
+            </button>
+            <button type="button" disabled={importAgebMun.isPending} className="rounded bg-slate-800 px-3 py-2 text-white" onClick={() => importAgebMun.mutate()}>
+              2. AGEB municipio
+            </button>
+            <button type="button" disabled={relink.isPending} className="rounded bg-primary-600 px-3 py-2 text-white" onClick={() => relink.mutate()}>
+              3. Relink reportes/incidencias
+            </button>
+          </div>
+          {[importMun, importAgebMun, relink].map((m, i) =>
+            m.isSuccess && m.data != null ? (
+              <pre key={i} className="rounded bg-slate-100 p-2 text-xs">
+                {JSON.stringify(m.data as object, null, 2)}
+              </pre>
+            ) : null,
           )}
-          {importInegi.error && <p className="text-red-600">{(importInegi.error as Error).message}</p>}
         </section>
       )}
     </div>

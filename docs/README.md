@@ -2,7 +2,7 @@
 
 Plataforma ciudadana para **detección, registro, análisis y priorización** de fugas y problemas de agua potable.
 
-> **Estado del repositorio:** sin código de aplicación (solo `docs/`). Todo lo descrito es **especificación para desarrollo**, no funcionalidad implementada.
+> **Estado del repositorio:** MVP en `backend/` y `frontend/`; `docs/` sigue siendo la especificación canónica. Contraste código vs diseño: [reference-architecture.md](./03-architecture/reference-architecture.md) §15.
 
 ## Orden de lectura recomendado
 

@@ -13,9 +13,17 @@ class Settings(BaseSettings):
     jwt_access_ttl_min: int = 15
     jwt_refresh_ttl_days: int = 7
     photos_path: str = "./data/photos"
-    cors_origins: str = "http://localhost:5173,http://localhost:8081"
-    # Regex opcional para orígenes dinámicos (p. ej. previews de Render: https://agua-alerta.*\.onrender\.com)
-    cors_origin_regex: str | None = None
+    host: str = "0.0.0.0"
+    port: int = 8000
+    cors_origins: str = "http://localhost:5173,http://localhost:3080,http://localhost:8081"
+    # Orígenes dinámicos permitidos (red local por defecto). En producción sobrescribir con CORS_ORIGIN_REGEX,
+    # p. ej. ^https://agua-alerta(-[a-z0-9-]+)?\.web\.app$ ; cadena vacía lo desactiva.
+    cors_origin_regex: str = (
+        r"^https?://(localhost|127\.0\.0\.1"
+        r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+        r"|192\.168\.\d{1,3}\.\d{1,3}"
+        r"|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$"
+    )
 
     # Almacenamiento de fotos: "local" (volumen) o "s3" (Supabase Storage, Cloudflare R2, MinIO…)
     storage_backend: str = "local"
@@ -32,6 +40,8 @@ class Settings(BaseSettings):
     duplicate_suggest_radius_m: float = 50.0
     priority_pop_ref: int = 5000
     log_level: str = "INFO"
+    password_reset_ttl_min: int = 60
+    password_reset_dev_expose_token: bool = False
     max_photo_bytes: int = 5 * 1024 * 1024
     allowed_photo_mimes: str = "image/jpeg,image/png,image/webp"
 

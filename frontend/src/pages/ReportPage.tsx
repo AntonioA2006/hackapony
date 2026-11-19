@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { apiFetch } from "../shared/api/client";
+import { apiFetch, getApiBase } from "../shared/api/client";
 import IncidentsMap from "../shared/map/IncidentsMap";
 
 const CATEGORIES = [
@@ -55,7 +55,7 @@ export default function ReportPage() {
         for (const file of Array.from(photos).slice(0, 5)) {
           const fd = new FormData();
           fd.append("file", file);
-          await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1"}/reports/${report.id}/photos`, {
+          await fetch(`${getApiBase()}/reports/${report.id}/photos`, {
             method: "POST",
             headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
             body: fd,
