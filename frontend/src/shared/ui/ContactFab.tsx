@@ -113,14 +113,7 @@ export default function ContactFab() {
         }`}
       >
         <span className="grid h-14 w-14 shrink-0 place-items-center" aria-hidden>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M7 3.8h2.2l1.2 3-1.6 1a12.5 12.5 0 0 0 5.4 5.4l1-1.6 3 1.2V19a2 2 0 0 1-2.2 2A16.2 16.2 0 0 1 3 7.8 2 2 0 0 1 5 5.6"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <i className="fa-solid fa-phone text-[18px]" aria-hidden />
         </span>
         <span className={`aa-fab-reveal ${expandLeft ? "origin-right" : "origin-left"}`}>
           <span className={`block min-w-0 overflow-hidden whitespace-nowrap text-left ${expandLeft ? "pl-4" : "pr-4"}`}>

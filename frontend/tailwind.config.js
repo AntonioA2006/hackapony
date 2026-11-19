@@ -26,8 +26,8 @@ export default {
         ok: "#1e9e78",
       },
       fontFamily: {
-        display: ['"Inter Tight Variable"', '"Inter Tight"', "ui-sans-serif", "system-ui", "sans-serif"],
-        sans: ['"Inter Variable"', "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ['"Plus Jakarta Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ['"Plus Jakarta Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
       },
       fontSize: {
         caption: ["10px", { lineHeight: "2.3" }],
