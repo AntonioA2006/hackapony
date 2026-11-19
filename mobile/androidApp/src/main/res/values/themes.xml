@@ -1,0 +1,10 @@
+<resources>
+    <color name="canvas">#F7FAFC</color>
+    <color name="brand">#0B84C6</color>
+    <style name="Theme.AguaAlerta" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/canvas</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

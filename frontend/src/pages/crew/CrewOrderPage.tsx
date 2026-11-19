@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PhoneIcon, PinIcon } from "../../shared/ui/icons";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiFetch } from "../../shared/api/client";
@@ -103,7 +104,7 @@ export default function CrewOrderPage() {
           </Button>
           {phones[0] ? (
             <a className="press inline-flex min-h-[44px] items-center justify-center rounded-full border border-soot bg-soot px-4 text-body font-medium text-white" href={`tel:+52${phones[0]}`}>
-              📞 Llamar a quien reportó
+              <PhoneIcon size={18} /> Llamar a quien reportó
             </a>
           ) : (
             <span className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-dashed border-muted px-3 text-center text-[12px] text-ash">Sin teléfono de contacto</span>
@@ -128,7 +129,7 @@ export default function CrewOrderPage() {
             <li key={r.id} className="rounded-input border border-line p-3">
               <p className="text-ink">{r.title}</p>
               <p className="text-[13px] text-warm">{r.description}</p>
-              {r.address_reference && <p className="mt-1 text-[12px] text-warm">📍 {r.address_reference}</p>}
+              {r.address_reference && <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-warm"><PinIcon size={14} /> {r.address_reference}</p>}
               {r.photos.length > 0 && (
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {r.photos.map((p, i) => (

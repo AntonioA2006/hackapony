@@ -1,9 +1,10 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./shared/auth/AuthContext";
 import { isCrew, isOperator, isSupervisor, ROLE_LABELS } from "./shared/roles";
 import { useView, VIEW_HOME, viewFor, type View } from "./shared/viewMode";
 import { Button, ButtonLink, Spinner } from "./shared/ui";
+import { BurgerIcon } from "./shared/ui/icons";
 import ContactFab from "./shared/ui/ContactFab";
 import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -76,6 +77,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  // El menú móvil se cierra al navegar y con Esc
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   const { chosen, choose } = useView();
   const view = viewFor(user?.role, chosen);
   const supervisor = isSupervisor(user?.role);
@@ -188,25 +197,17 @@ function Shell({ children }: { children: React.ReactNode }) {
             aria-label={open ? "Cerrar menú" : "Abrir menú"}
             onClick={() => setOpen((v) => !v)}
           >
-            <span className="relative grid h-5 w-5 place-items-center" aria-hidden>
-              <i className={`fa-solid fa-bars absolute text-[18px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? "rotate-90 scale-75 opacity-0" : "opacity-100"}`} />
-              <i className={`fa-solid fa-xmark absolute text-[18px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? "opacity-100" : "-rotate-90 scale-75 opacity-0"}`} />
-            </span>
+            <BurgerIcon open={open} />
           </button>
         </nav>
-        <div
-          id="menu-movil"
-          inert={!open}
-          className={`grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:hidden ${
-            open ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"
-          }`}
-        >
-          <div className="overflow-hidden border-t border-line bg-canvas">
-            <div className={`px-4 pb-4 pt-3 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? "translate-y-0" : "-translate-y-2"}`}>
+        {/* Siempre montado: el colapsable anima la apertura y el cierre; inerte mientras está cerrado */}
+        <div id="menu-movil" className={`aa-collapse lg:hidden ${open ? "is-open" : ""}`} inert={!open}>
+          <div>
+          <div className="border-t border-line bg-canvas px-4 pb-4 pt-3">
             <p className="mb-2 text-[12px] font-medium uppercase tracking-[0.04em] text-warm">
               {view === "operador" ? "Operador" : view === "cuadrilla" ? "Cuadrilla" : user ? "Ciudadano" : "Menú"}
             </p>
-            <div className="flex flex-col gap-1">
+            <div className="stagger flex flex-col gap-1">
               {view === "operador" ? (
                 <>
                   <NavLink to="/nosotros" className={menuItem} onClick={() => setOpen(false)}>

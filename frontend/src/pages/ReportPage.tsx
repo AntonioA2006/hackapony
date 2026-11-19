@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import CallButtons from "../shared/CallButtons";
+import { CheckIcon, DropIcon, FaucetIcon, WavesIcon } from "../shared/ui/icons";
 import { useAuth } from "../shared/auth/AuthContext";
 import { apiFetch, authHeader, getApiBase } from "../shared/api/client";
 import { CATEGORY_LABELS, FLOW_RATE_LPH, SEVERITY_LABELS } from "../shared/labels";
@@ -46,8 +47,10 @@ function TicketTracker({ stage, dispatched, crew }: { stage: number; dispatched:
           <li key={label} className={`anim-fade rounded-card border p-3 ${done ? "border-ok/40 bg-ok/5" : current ? "border-cyan/40 bg-sky/40" : "border-line bg-card"}`} style={{ animationDelay: `${i * 80}ms` }}>
             <p className="text-[11px] uppercase tracking-[0.025em] text-warm">Etapa {i + 1}</p>
             <p className="mt-0.5 font-medium text-ink">
-              {done ? "✓ " : current ? "● " : ""}
-              {label}
+              <span className="inline-flex items-center gap-1.5">
+                {done ? <CheckIcon size={16} className="text-ok" /> : current ? <span className="h-2 w-2 animate-pulse rounded-full bg-cyan" aria-hidden /> : null}
+                {label}
+              </span>
             </p>
             {i === 1 && current && <p className="text-[12px] text-warm">{dispatched ? `Cuadrilla en camino${crew ? `: ${crew}` : ""}` : "Despacho revisó tu reporte"}</p>}
           </li>
@@ -423,23 +426,24 @@ export default function ReportPage() {
             <legend className="label">¿Cómo sale el agua? (opcional)</legend>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { k: "goteo", t: "Goteo", d: "Gotas constantes", icon: "💧" },
-                { k: "chorro", t: "Chorro", d: "Flujo continuo", icon: "🚿" },
-                { k: "inundacion", t: "Inundación", d: "Encharca la calle", icon: "🌊" },
-              ].map((o) => (
+                { k: "goteo", t: "Goteo", d: "Gotas constantes", Icon: DropIcon },
+                { k: "chorro", t: "Chorro", d: "Flujo continuo", Icon: FaucetIcon },
+                { k: "inundacion", t: "Inundación", d: "Encharca la calle", Icon: WavesIcon },
+              ].map(({ k, t, d, Icon }) => (
                 <label
-                  key={o.k}
-                  className={`press cursor-pointer rounded-card border p-3 text-center transition-colors ${
-                    flow === o.k ? "border-cyan bg-sky/50 shadow-subtle" : "border-line bg-card hover:border-muted"
+                  key={k}
+                  data-selected={flow === k}
+                  className={`flow-card press cursor-pointer rounded-card border p-3 text-center transition-all duration-200 ${
+                    flow === k ? "border-cyan bg-sky/40 shadow-subtle ring-1 ring-cyan/30" : "border-line bg-card hover:border-muted hover:shadow-subtle"
                   }`}
                 >
-                  <input type="radio" name="flow" value={o.k} className="sr-only" checked={flow === o.k} onChange={() => setFlow(o.k)} onClick={() => flow === o.k && setFlow(null)} />
-                  <span className="block text-xl" aria-hidden>
-                    {o.icon}
+                  <input type="radio" name="flow" value={k} className="sr-only" checked={flow === k} onChange={() => setFlow(k)} onClick={() => flow === k && setFlow(null)} />
+                  <span className="flow-icon mx-auto mb-1.5 grid h-10 w-10 place-items-center rounded-full bg-canvas text-warm">
+                    <Icon size={22} data-flow={k} />
                   </span>
-                  <span className="block text-[13px] font-medium text-ink">{o.t}</span>
+                  <span className="block text-[13px] font-medium text-ink">{t}</span>
                   <span className="block text-[11px] text-warm">
-                    {o.d} · ~{FLOW_RATE_LPH[o.k].toLocaleString("es-MX")} L/h
+                    {d} · ~{FLOW_RATE_LPH[k].toLocaleString("es-MX")} L/h
                   </span>
                 </label>
               ))}
@@ -531,7 +535,7 @@ export default function ReportPage() {
               </div>
             </div>
             {results && (
-              <ul className="mt-2 max-h-48 divide-y divide-line overflow-auto rounded-input border border-line" aria-label="Resultados de la búsqueda">
+              <ul className="anim-drop mt-2 max-h-48 divide-y divide-line overflow-auto rounded-input border border-line" aria-label="Resultados de la búsqueda">
                 {results.length === 0 && <li className="px-3 py-2 text-[13px] text-warm">Sin resultados en México. Prueba con calle y municipio.</li>}
                 {results.map((r) => (
                   <li key={`${r.lat},${r.lon}`}>
@@ -553,7 +557,7 @@ export default function ReportPage() {
               {showCoords ? "Ocultar coordenadas" : "Escribir coordenadas manualmente"}
             </button>
             {showCoords && (
-              <div className="mt-2 flex flex-wrap items-end gap-2">
+              <div className="anim-drop mt-2 flex flex-wrap items-end gap-2">
                 <label className="w-36">
                   <span className="label">Latitud</span>
                   <input className="field font-mono" inputMode="decimal" value={latText} onChange={(e) => setLatText(e.target.value)} placeholder="19.43260" />

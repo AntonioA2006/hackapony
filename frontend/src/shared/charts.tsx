@@ -258,7 +258,7 @@ export function ChartCard({
           </button>
         )}
       </header>
-      {showTable && table ? <DataTable {...table} /> : children}
+      <div key={showTable ? "t" : "c"} className="anim-fade">{showTable && table ? <DataTable {...table} /> : children}</div>
     </section>
   );
 }
