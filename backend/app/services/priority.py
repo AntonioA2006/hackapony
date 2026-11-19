@@ -38,6 +38,7 @@ def recalculate_incident_urgency(db: Session, incident: Incident) -> None:
         opened_at=incident.opened_at,
         status=incident.status,
         pop_ref=settings.priority_pop_ref,
+        leak_flow=incident.leak_flow,
     )
     incident.urgency_score = breakdown.score
     incident.priority_band = breakdown.band

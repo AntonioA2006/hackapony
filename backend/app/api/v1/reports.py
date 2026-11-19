@@ -243,8 +243,20 @@ def patch_report(
                 raise HTTPException(422, detail="Motivo requerido para rechazo")
             report.status = payload.status
             report.rejection_reason = payload.rejection_reason
-            if report.incident_id is None and payload.status in (ReportStatus.resolved, ReportStatus.rejected):
-                purge_report_photos(db, report, user.id)
+            purged = 0
+            if payload.status == ReportStatus.rejected or (
+                report.incident_id is None and payload.status == ReportStatus.resolved
+            ):
+                purged = purge_report_photos(db, report, user.id)
+            if purged and report.incident_id:
+                db.add(
+                    IncidentHistory(
+                        incident_id=report.incident_id,
+                        actor_user_id=user.id,
+                        event_type="photos_purged",
+                        payload={"report_id": str(report.id), "deleted": purged, "reason": payload.status.value},
+                    )
+                )
             notify_user(
                 db,
                 report.user_id,

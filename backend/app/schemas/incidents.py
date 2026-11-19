@@ -57,6 +57,7 @@ class UrgencyBreakdownOut(BaseModel):
     score: float
     band: PriorityBand
     severity_pts: float
+    flow_pts: float = 0.0
     corroboration_pts: float
     territorial_pts: float
     time_pts: float
