@@ -19,10 +19,10 @@ logger = logging.getLogger("agua_alerta")
 
 
 def _bootstrap_superadmin() -> None:
-    """Crea el superadministrador inicial desde variables de entorno (sin credenciales en el código)."""
+    """Crea (o promueve) el superadministrador inicial desde BOOTSTRAP_SUPERADMIN_EMAIL; la contraseña es opcional."""
     email = (settings.bootstrap_superadmin_email or "").strip().lower()
     password = settings.bootstrap_superadmin_password or ""
-    if not email or not password:
+    if not email:
         return
     from sqlalchemy import func, select
 
@@ -32,14 +32,20 @@ def _bootstrap_superadmin() -> None:
 
     try:
         with SessionLocal() as db:
-            if db.scalar(select(User).where(func.lower(User.email) == email)):
+            existing = db.scalar(select(User).where(func.lower(User.email) == email))
+            if existing:
+                if existing.role != UserRole.SUPERADMINISTRADOR:
+                    existing.role = UserRole.SUPERADMINISTRADOR
+                    db.commit()
+                    logger.info("Rol de superadministrador asignado a %s", email)
                 return
             db.add(
                 User(
                     email=email,
                     display_name="Superadministrador",
                     role=UserRole.SUPERADMINISTRADOR,
-                    password_hash=hash_password(password),
+                    # Sin contraseña: la persona entra con Firebase usando este correo (verificado) y la cuenta se vincula
+                    password_hash=hash_password(password) if password else None,
                 )
             )
             db.commit()

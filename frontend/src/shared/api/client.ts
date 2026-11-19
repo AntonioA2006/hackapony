@@ -82,10 +82,12 @@ export function clearTokens() {
   localStorage.removeItem("refresh_token");
 }
 
-const CONNECT_HELP =
-  "No se pudo conectar con el servidor. Verifica que Agua Alerta esté ejecutándose y que estés conectado a la misma red.";
+const CONNECT_HELP = import.meta.env.PROD
+  ? "No pudimos conectar con el servidor. Si es la primera visita en un rato, está despertando: inténtalo de nuevo en unos segundos."
+  : "No se pudo conectar con el servidor. Verifica que Agua Alerta esté ejecutándose y que estés conectado a la misma red.";
 
-const FETCH_TIMEOUT_MS = 30_000;
+// El plan gratuito de la API se suspende sin tráfico y tarda ~50 s en despertar.
+const FETCH_TIMEOUT_MS = 70_000;
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);

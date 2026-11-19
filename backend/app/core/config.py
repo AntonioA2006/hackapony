@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Firebase Authentication: si se define, la API acepta ID tokens de Firebase (además del JWT propio)
     firebase_project_id: str | None = None
 
-    # Crea un superadministrador al arrancar si no existe (solo se usa si ambos están definidos)
+    # Superadministrador inicial: con solo el email, la persona entra vía Firebase con ese correo verificado
     bootstrap_superadmin_email: str | None = None
     bootstrap_superadmin_password: str | None = None
     grouping_distance_m: float = 75.0
