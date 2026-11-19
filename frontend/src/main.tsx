@@ -6,6 +6,7 @@ import App from "./App";
 import { warmUpApi } from "./shared/api/client";
 import { AuthProvider } from "./shared/auth/AuthContext";
 import { RegionProvider } from "./shared/region/RegionContext";
+import { ViewProvider } from "./shared/viewMode";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 
@@ -19,7 +20,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <AuthProvider>
           <RegionProvider>
-            <App />
+            <ViewProvider>
+              <App />
+            </ViewProvider>
           </RegionProvider>
         </AuthProvider>
       </BrowserRouter>

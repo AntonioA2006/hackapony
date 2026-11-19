@@ -1,7 +1,8 @@
 import { lazy, Suspense, useState } from "react";
-import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./shared/auth/AuthContext";
-import { homeFor, isCrew, isOperator, isStaff, isSupervisor, ROLE_LABELS } from "./shared/roles";
+import { isCrew, isOperator, isSupervisor, ROLE_LABELS } from "./shared/roles";
+import { useView, VIEW_HOME, viewFor, type View } from "./shared/viewMode";
 import { Button, ButtonLink, Spinner } from "./shared/ui";
 import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -36,6 +37,30 @@ function Logo() {
   );
 }
 
+/** Supervisión: cambiar entre la vista de ciudadano, operador o cuadrilla sin cerrar sesión. */
+function ViewSwitcher({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const navigate = useNavigate();
+  return (
+    <label className="flex items-center gap-1.5 text-[12px] text-warm">
+      <span className="sr-only sm:not-sr-only">Ver como</span>
+      <select
+        className="rounded-full border border-line bg-card px-2.5 py-1 text-[13px] text-ink"
+        value={view}
+        onChange={(e) => {
+          const v = e.target.value as View;
+          onChange(v);
+          navigate(VIEW_HOME[v]);
+        }}
+        aria-label="Ver como"
+      >
+        <option value="ciudadano">Ciudadano</option>
+        <option value="operador">Operador</option>
+        <option value="cuadrilla">Cuadrilla</option>
+      </select>
+    </label>
+  );
+}
+
 const navLink = ({ isActive }: { isActive: boolean }) =>
   `flex h-8 items-center rounded-full px-3 text-body transition-colors ${isActive ? "text-ink" : "text-warm hover:text-ink"}`;
 
@@ -43,15 +68,19 @@ function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [open, setOpen] = useState(false);
-  const staff = isStaff(user?.role);
+  const { chosen, choose } = useView();
+  const view = viewFor(user?.role, chosen);
+  const supervisor = isSupervisor(user?.role);
+  // "staff" = la vista activa es de personal (en vista ciudadana, supervisión navega como ciudadano)
+  const staff = Boolean(user) && view !== "ciudadano";
   const links = (
     <>
-      {isCrew(user?.role) && (
+      {user && view === "cuadrilla" && (
         <NavLink to="/cuadrilla" className={navLink} onClick={() => setOpen(false)}>
-          Mis órdenes
+          {supervisor ? "Órdenes en campo" : "Mis órdenes"}
         </NavLink>
       )}
-      {isOperator(user?.role) && (
+      {user && view === "operador" && (
         <>
           <NavLink to="/panel" end className={navLink} onClick={() => setOpen(false)}>
             Panel
@@ -74,7 +103,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </NavLink>
         </>
       )}
-      {isSupervisor(user?.role) && (
+      {supervisor && view === "operador" && (
         <NavLink to="/panel/equipo" className={navLink} onClick={() => setOpen(false)}>
           Equipo
         </NavLink>
@@ -93,9 +122,10 @@ function Shell({ children }: { children: React.ReactNode }) {
               <>
                 <NavLink to="/perfil" className={navLink} title={ROLE_LABELS[user.role]}>
                   {user.display_name}
-                  {staff && <span className="ml-1.5 rounded-full bg-sky px-1.5 text-[10px] font-medium text-cyan-edge">{ROLE_LABELS[user.role]}</span>}
+                  {user.role !== "CIUDADANO" && <span className="ml-1.5 rounded-full bg-sky px-1.5 text-[10px] font-medium text-cyan-edge">{ROLE_LABELS[user.role]}</span>}
                 </NavLink>
-                <button type="button" onClick={() => void logout()} className="px-3 text-body text-warm hover:text-ink">
+                {supervisor && <ViewSwitcher view={view} onChange={(v) => { choose(v); setOpen(false); }} />}
+                <button type="button" onClick={() => { choose(null); void logout(); }} className="px-3 text-body text-warm hover:text-ink">
                   Salir
                 </button>
                 {!staff && (
@@ -137,7 +167,8 @@ function Shell({ children }: { children: React.ReactNode }) {
                   <ButtonLink to="/perfil" onClick={() => setOpen(false)}>
                     Mi perfil
                   </ButtonLink>
-                  <button type="button" className="px-3 text-warm" onClick={() => void logout()}>
+                  {supervisor && <ViewSwitcher view={view} onChange={(v) => { choose(v); setOpen(false); }} />}
+                  <button type="button" className="px-3 text-warm" onClick={() => { choose(null); void logout(); }}>
                     Salir
                   </button>
                 </>
@@ -178,8 +209,11 @@ function Shell({ children }: { children: React.ReactNode }) {
 /** Rutas por rol: despacho (operador/supervisión), cuadrilla o solo supervisión. */
 function StaffRoute({ children, need = "operator" }: { children: React.ReactNode; need?: "operator" | "crew" | "supervisor" }) {
   const { user } = useAuth();
-  const allowed = need === "supervisor" ? isSupervisor(user?.role) : need === "crew" ? isCrew(user?.role) : isOperator(user?.role);
-  return <PrivateRoute>{allowed ? children : <Navigate to={homeFor(user?.role)} replace />}</PrivateRoute>;
+  const { chosen } = useView();
+  const sup = isSupervisor(user?.role);
+  // Supervisión puede abrir cualquier vista de personal
+  const allowed = sup || (need === "crew" ? isCrew(user?.role) : need === "operator" ? isOperator(user?.role) : false);
+  return <PrivateRoute>{allowed ? children : <Navigate to={VIEW_HOME[viewFor(user?.role, chosen)]} replace />}</PrivateRoute>;
 }
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -210,7 +244,9 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 /** El personal entra a su panel; la ciudadanía a su tablero. */
 function HomeForRole() {
   const { user } = useAuth();
-  return isStaff(user?.role) ? <Navigate to={homeFor(user?.role)} replace /> : <DashboardPage />;
+  const { chosen } = useView();
+  const view = viewFor(user?.role, chosen);
+  return view === "ciudadano" ? <DashboardPage /> : <Navigate to={VIEW_HOME[view]} replace />;
 }
 
 export default function App() {

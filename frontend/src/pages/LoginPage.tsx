@@ -2,7 +2,8 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth, type User } from "../shared/auth/AuthContext";
 import { authErrorMessage } from "../shared/firebase";
-import { homeFor, isCrew, isOperator } from "../shared/roles";
+import { isCrew, isOperator, isSupervisor } from "../shared/roles";
+import { useView, VIEW_HOME, viewFor } from "../shared/viewMode";
 import { Button, Field, Notice } from "../shared/ui";
 import { fieldA11y, validateEmail } from "../shared/validation";
 import AuthLayout from "./AuthLayout";
@@ -17,6 +18,7 @@ const ENTRY_TEXT: Record<Entry, { title: string; lead: string }> = {
 
 export default function LoginPage() {
   const { login, logout, waking } = useAuth();
+  const { choose } = useView();
   const navigate = useNavigate();
   const [entry, setEntry] = useState<Entry>("ciudadano");
   const [email, setEmail] = useState("");
@@ -35,18 +37,20 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const me: User = await login(email.trim(), password);
-      // Las entradas de personal exigen ese rol; supervisión entra por la entrada normal.
+      // Las entradas de personal exigen ese rol. Supervisión puede entrar por cualquiera y usar esa vista.
+      const sup = isSupervisor(me.role);
       if (entry === "operador" && !isOperator(me.role)) {
         await logout();
         setError("Tu cuenta no tiene el rol de operador. Pide a supervisión que te lo asigne.");
         return;
       }
-      if (entry === "cuadrilla" && !isCrew(me.role)) {
+      if (entry === "cuadrilla" && !isCrew(me.role) && !sup) {
         await logout();
         setError("Tu cuenta no pertenece a una cuadrilla. Pide a supervisión que te asigne ese rol.");
         return;
       }
-      navigate(homeFor(me.role));
+      if (sup) choose(entry);
+      navigate(VIEW_HOME[viewFor(me.role, sup ? entry : null)]);
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
