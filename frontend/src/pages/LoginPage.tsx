@@ -101,7 +101,7 @@ export default function LoginPage() {
       {entry === "ciudadano" && (
         <div className="mt-6 border-t border-line pt-5">
           <p className="mb-3 text-center text-[12px] text-warm">¿Eres personal del organismo operador?</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
             <Button onClick={() => { setEntry("operador"); setError(""); }}>Entrar como operador</Button>
             <Button onClick={() => { setEntry("cuadrilla"); setError(""); }}>Entrar como cuadrilla</Button>
           </div>
