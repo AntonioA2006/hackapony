@@ -5,7 +5,11 @@ Set-Location $root
 
 $ip = (
     Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -notlike "127.*" -and $_.PrefixOrigin -eq "Dhcp" } |
+    Where-Object {
+        $_.IPAddress -notlike "127.*" -and
+        $_.IPAddress -notlike "169.254.*" -and
+        $_.PrefixOrigin -eq "Dhcp"
+    } |
     Select-Object -First 1 -ExpandProperty IPAddress
 )
 if (-not $ip) {
@@ -29,3 +33,9 @@ Write-Host "  Health: http://${ip}:3080/health"
 Write-Host ""
 Write-Host "Local: http://localhost:3080  |  Respaldo: :8081"
 Write-Host "Cuentas: ver backend/scripts/seed_dev.py o README"
+$fw = Get-NetFirewallRule -DisplayName "Agua Alerta nginx (3080)" -ErrorAction SilentlyContinue
+if (-not $fw) {
+    Write-Host ""
+    Write-Host "Si el MOVIL no carga: ejecuta firewall-lan.ps1 COMO ADMINISTRADOR" -ForegroundColor Yellow
+    Write-Host "  .\scripts\diagnose-mobile.ps1"
+}

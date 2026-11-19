@@ -21,6 +21,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agua}:${POSTGRES_PASSWORD:-agua_secret}@db:5432/${POSTGRES_DB:-agua_alerta}
+      PASSWORD_RESET_DEV_EXPOSE_TOKEN: ${PASSWORD_RESET_DEV_EXPOSE_TOKEN:-true}
     ports:
       - "8000:8000"
     volumes:

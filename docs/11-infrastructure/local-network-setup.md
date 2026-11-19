@@ -139,8 +139,27 @@ En `docker-compose.yml`, Postgres publica solo en `127.0.0.1:5432` (no expuesto 
 
 ## Solución de problemas
 
+### El móvil no carga la página (timeout / no abre)
+
+En Windows con red **Pública** o corporativa, el firewall **bloquea conexiones entrantes** al puerto 3080. Desde la PC puede funcionar `localhost`, pero el teléfono no.
+
+```powershell
+.\scripts\diagnose-mobile.ps1
+# Clic derecho PowerShell -> Ejecutar como administrador:
+.\scripts\firewall-lan.ps1
+```
+
+La regla debe incluir perfil **Public** (PCs con GPO suelen marcar Ethernet como pública).
+
+**Misma subred:** el teléfono debe estar en la misma red que la IP que compartes. Ejemplo: PC `10.27.62.22` y móvil `10.27.62.50` sí; móvil solo `192.168.0.x` y PC `10.27.x` en interfaces distintas → **no se verán**.
+
+**Wi‑Fi de la PC en `169.254.x`:** el adaptador Wi‑Fi no tiene DHCP; no uses esa IP. Usa la de Ethernet/Wi‑Fi con IP real (script `diagnose-mobile.ps1`).
+
+**Aislamiento AP / red corporativa:** conectar el móvil al **hotspot de Windows** (la PC con Ethernet comparte Wi‑Fi) o probar en casa con un router doméstico.
+
 | Síntoma | Acción |
 |---------|--------|
+| No carga en móvil, OK en PC | `firewall-lan.ps1` como admin + `diagnose-mobile.ps1` |
 | `Failed to fetch` en mapa | Verifique URL (3080), reconstruya `web`: `docker compose up -d --build web`, confirme que `.env` no fija `VITE_API_BASE_URL=localhost`. |
 | Login OK en PC, falla en móvil | Use `:3080`, no `:8081` con build antiguo. |
 | CORS en Vite LAN | Ejecute `configure-lan.ps1` o añada `http://<IP>:5173` a `CORS_ORIGINS`. |

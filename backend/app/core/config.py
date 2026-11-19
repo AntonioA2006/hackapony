@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     duplicate_suggest_radius_m: float = 50.0
     priority_pop_ref: int = 5000
     log_level: str = "INFO"
+    password_reset_ttl_min: int = 60
+    password_reset_dev_expose_token: bool = False
     max_photo_bytes: int = 5 * 1024 * 1024
     allowed_photo_mimes: str = "image/jpeg,image/png,image/webp"
 
