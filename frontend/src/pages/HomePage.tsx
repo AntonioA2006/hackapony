@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../shared/auth/AuthContext";
 import { apiFetch } from "../shared/api/client";
@@ -19,26 +20,66 @@ type Overview = {
   zones: Zone[];
 };
 
+const FLOW = "M28 214c70-8 96-62 168-58 74 4 92 70 168 62 48-6 78-28 128-18";
+const FLOW_STATES = [
+  { label: "Recibido", color: "#526277", dot: "#94a3b8", priority: "Media" },
+  { label: "Validado", color: "#0e5fbe", dot: "#1479e8", priority: "Alta" },
+  { label: "En atención", color: "#0e5fbe", dot: "#14b8a6", priority: "Alta" },
+  { label: "Resuelto", color: "#1e9e78", dot: "#1e9e78", priority: "Cerrada" },
+];
+
 function HeroMark() {
+  const pathRef = useRef<SVGPathElement>(null);
+  const [spot, setSpot] = useState({ x: 28, y: 214 });
+  const [step, setStep] = useState(0);
+  const stage = FLOW_STATES[step];
+
+  useEffect(() => {
+    const path = pathRef.current;
+    if (!path) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const length = path.getTotalLength();
+    const duration = 16000;
+    let frame = 0;
+    const started = performance.now();
+    const tick = (now: number) => {
+      const cycle = ((now - started) % (duration * 2)) / duration;
+      const along = cycle <= 1 ? cycle : 2 - cycle;
+      const eased = along * along * (3 - 2 * along);
+      const point = path.getPointAtLength(eased * length);
+      setSpot({ x: point.x, y: point.y });
+      setStep(Math.min(FLOW_STATES.length - 1, Math.floor(eased * FLOW_STATES.length)));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   return (
-    <svg viewBox="0 0 520 360" className="h-full w-full" role="img" aria-label="Red de agua sobre un mapa de colonia, con un reporte en atención">
+    <svg viewBox="0 0 520 360" className="h-full w-full" role="img" aria-label="Una fuga recorre la red y cambia de estado">
       <rect width="520" height="360" fill="#f4f8fc" />
       <path d="M0 78h520M0 156h520M0 234h520M0 312h520M96 0v360M198 0v360M310 0v360M422 0v360" stroke="#d5e2ee" strokeWidth="1" />
-      <path d="M28 214c70-8 96-62 168-58 74 4 92 70 168 62 48-6 78-28 128-18" fill="none" stroke="#1479e8" strokeWidth="8" strokeLinecap="round" />
-      <path d="M28 214c70-8 96-62 168-58 74 4 92 70 168 62 48-6 78-28 128-18" fill="none" stroke="#7ec8f8" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="196" cy="160" r="18" fill="#fff" stroke="#1479e8" strokeWidth="4" />
-      <path d="M196 148c6 8 10 14 10 20a10 10 0 1 1-20 0c0-6 4-12 10-20z" fill="#1479e8" />
-      <g transform="translate(286 46)">
+      <path d={FLOW} fill="none" stroke="#1479e8" strokeWidth="8" strokeLinecap="round" />
+      <path ref={pathRef} d={FLOW} fill="none" stroke="#7ec8f8" strokeWidth="3" strokeLinecap="round" />
+      <g transform={`translate(${spot.x} ${spot.y})`} className="aa-flow-pin">
+        <circle r="18" fill="#fff" stroke="#1479e8" strokeWidth="4" />
+        <path d="M0 -12c6 8 10 14 10 20a10 10 0 1 1-20 0c0-6 4-12 10-20z" fill="#1479e8" />
+      </g>
+      <g transform="translate(286 46)" className="aa-hero-card">
         <rect width="196" height="92" rx="16" fill="#fff" stroke="#e2e8f0" />
-        <circle cx="28" cy="32" r="10" fill="#14b8a6" />
+        <circle cx="28" cy="32" r="10" fill={stage.dot} className="aa-status-dot" />
         <text x="48" y="28" fill="#526277" fontSize="12" fontFamily="Plus Jakarta Sans, sans-serif">Folio AA-2041</text>
         <text x="48" y="48" fill="#142235" fontSize="16" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">Fuga en la red</text>
-        <text x="48" y="70" fill="#0e5fbe" fontSize="13" fontFamily="Plus Jakarta Sans, sans-serif">En atención</text>
+        <text key={stage.label} x="48" y="70" fill={stage.color} fontSize="13" fontFamily="Plus Jakarta Sans, sans-serif" className="aa-status-label">
+          {stage.label}
+        </text>
       </g>
-      <g transform="translate(36 250)">
+      <g transform="translate(36 250)" className="aa-hero-card">
         <rect width="150" height="64" rx="14" fill="#0b1f33" />
         <text x="16" y="28" fill="#8ea0b3" fontSize="12" fontFamily="Plus Jakarta Sans, sans-serif">Prioridad</text>
-        <text x="16" y="48" fill="#fff" fontSize="16" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">Alta</text>
+        <text key={stage.priority} x="16" y="48" fill="#fff" fontSize="16" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif" className="aa-status-label">
+          {stage.priority}
+        </text>
       </g>
     </svg>
   );

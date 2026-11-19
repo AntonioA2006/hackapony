@@ -69,7 +69,8 @@ const navLink = ({ isActive }: { isActive: boolean }) =>
   `flex h-9 items-center rounded-full px-3 text-body transition-colors ${isActive ? "bg-sky font-medium text-ink" : "text-warm hover:bg-card hover:text-ink"}`;
 
 const textLink = "flex h-9 items-center rounded-full px-3 text-body text-warm transition-colors hover:bg-card hover:text-ink";
-const menuItem = "flex min-h-11 w-full items-center gap-3 rounded-card px-3 text-left text-body text-ink hover:bg-sky";
+const menuItem =
+  "flex min-h-11 w-full items-center gap-3 rounded-card px-3 text-left text-body text-ink transition-all duration-300 ease-out hover:translate-x-1 hover:bg-sky hover:text-cyan-edge";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -267,7 +268,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                 </>
               )}
             </div>
-          </div>
+            </div>
           </div>
         </div>
       </header>
