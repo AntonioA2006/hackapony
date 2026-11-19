@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.database import SessionLocal, get_db
+from app.middleware.request_id import RequestIdMiddleware
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
@@ -54,6 +55,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Agua Alerta API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(RequestIdMiddleware)
 _cors_kw: dict = {
     "allow_credentials": True,
     "allow_methods": ["*"],
@@ -90,7 +92,8 @@ def health_ready(db: Session = Depends(get_db)):
 
 @app.exception_handler(Exception)
 async def unhandled(request: Request, exc: Exception):
-    logger.exception("Error no controlado en %s %s", request.method, request.url.path)
+    request_id = getattr(request.state, "request_id", None)
+    logger.exception("Error no controlado request_id=%s %s %s", request_id, request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={
@@ -98,7 +101,7 @@ async def unhandled(request: Request, exc: Exception):
                 "code": "INTERNAL_ERROR",
                 "message": "Error interno",
                 "details": [],
-                "request_id": None,
+                "request_id": request_id,
             }
         },
     )

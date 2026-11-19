@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.core.rate_limit import check_rate_limit
 from app.core.storage import get_storage
-from app.services.photos import InvalidImage, sanitize_image
 from fastapi.responses import Response
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -17,6 +16,7 @@ from app.models.entities import IncidentHistory, Report, ReportPhoto
 from app.schemas.common import PaginatedResponse
 from app.schemas.reports import HistoryItem, ReportCreate, ReportCreateResponse, ReportOut, ReportPatch, ReportPhotoOut
 from app.services.grouping import nearby_public_suggestions, process_report_grouping
+from app.services.photo_sanitize import sanitize_photo
 from app.services.notifications import notify_user
 from app.services.spatial import point_wkt
 from app.utils.ids import new_public_id
@@ -231,10 +231,8 @@ async def upload_photo(
     content = await file.read(settings.max_photo_bytes + 1)
     if len(content) > settings.max_photo_bytes:
         raise HTTPException(413, detail="Archivo demasiado grande")
-    try:
-        clean, mime, ext = sanitize_image(content)
-    except InvalidImage as exc:
-        raise HTTPException(415, detail=str(exc)) from exc
+    clean, mime = sanitize_photo(content, settings.allowed_mime_set)
+    ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[mime]
     storage_key = f"{report.id}/{uuid.uuid4()}{ext}"
     get_storage().put(storage_key, clean, mime)
     photo = ReportPhoto(report_id=report.id, storage_key=storage_key, mime_type=mime, size_bytes=len(clean))

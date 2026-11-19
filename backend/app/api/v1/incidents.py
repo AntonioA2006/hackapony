@@ -91,6 +91,11 @@ def confirm_incident(
     incident = db.get(Incident, incident_id, with_for_update=True, populate_existing=True)
     if not incident or incident.status in (IncidentStatus.resolved, IncidentStatus.dismissed):
         raise HTTPException(404, detail="Incidencia no disponible")
+    already_reported = db.scalar(
+        select(Report.id).where(Report.incident_id == incident.id, Report.user_id == user.id).limit(1)
+    )
+    if already_reported:
+        raise HTTPException(400, detail="No puedes confirmar una incidencia que tú reportaste")
     inserted = db.execute(
         pg_insert(CitizenConfirmation)
         .values(id=uuid.uuid4(), incident_id=incident.id, user_id=user.id)

@@ -70,7 +70,10 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    check_rate_limit(f"login-ip:{client_ip}", max_calls=20, window_seconds=900)
+    check_rate_limit(f"login-email:{payload.email.lower()}", max_calls=5, window_seconds=900)
     user = db.scalar(select(User).where(func.lower(User.email) == payload.email.lower()))
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
