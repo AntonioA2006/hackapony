@@ -9,7 +9,7 @@ const base =
 const variants: Record<Variant, string> = {
   // Acción principal: el único relleno cromático de la pantalla
   primary: "border border-cyan-edge bg-cyan text-white hover:bg-cyan-edge",
-  ghost: "border border-line bg-card/0 font-normal text-ink hover:border-muted hover:bg-card",
+  ghost: "border border-[#e2e8f0] bg-white font-normal text-ink hover:border-muted hover:bg-canvas",
   dark: "border border-soot bg-soot text-white hover:bg-ink",
   quiet: "px-3 font-normal text-warm hover:text-ink",
 };
@@ -25,7 +25,7 @@ export function ButtonLink({ variant = "ghost", className = "", ...props }: Link
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`lift rounded-card border border-line bg-card p-6 shadow-card ${className}`}>{children}</div>;
+  return <div className={`surface-elevated lift p-6 ${className}`}>{children}</div>;
 }
 
 export function PageHeader({ title, lead, actions }: { title: ReactNode; lead?: ReactNode; actions?: ReactNode }) {
@@ -88,7 +88,7 @@ export function StatusTag({ status }: { status: string }) {
 
 export function Stat({ label, value, note }: { label: string; value: ReactNode; note?: ReactNode }) {
   return (
-    <div className="lift min-w-0 rounded-card border border-line bg-card p-5">
+    <div className="surface-elevated lift min-w-0 p-5">
       <p className="text-[12px] font-medium uppercase tracking-[0.025em] text-warm">{label}</p>
       <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-display text-heading-sm tabular-nums">{value}</p>
       {note && <p className="mt-1 text-[12px] text-warm">{note}</p>}

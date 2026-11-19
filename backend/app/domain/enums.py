@@ -57,6 +57,8 @@ class IncidentStatus(str, enum.Enum):
     open = "open"
     triaged = "triaged"
     in_progress = "in_progress"
+    # La cuadrilla ya entregó evidencia; el ciudadano lo ve resuelto. El operador aún no confirma el cierre.
+    pending_verification = "pending_verification"
     resolved = "resolved"
     dismissed = "dismissed"
 

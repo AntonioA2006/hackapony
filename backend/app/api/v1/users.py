@@ -40,7 +40,7 @@ def _report_to_out(db: Session, report: Report) -> ReportOut:
         created_at=report.created_at,
         reported_at=report.reported_at,
         leak_flow=report.leak_flow,
-        incident_status=report.incident.status.value if report.incident is not None else None,
+        incident_status="resolved" if report.incident is not None and report.incident.status.value == "pending_verification" else (report.incident.status.value if report.incident is not None else None),
     )
 
 
@@ -70,7 +70,7 @@ def my_active_report(user=Depends(get_current_user), db: Session = Depends(get_d
             "title": report.title,
             "status": report.status.value,
             "incident_public_id": inc.public_id if inc is not None else None,
-            "incident_status": inc.status.value if inc is not None else None,
+            "incident_status": "resolved" if inc is not None and inc.status.value == "pending_verification" else (inc.status.value if inc is not None else None),
             "urgency_score": float(inc.urgency_score) if inc is not None else None,
             "stage": stage,
             "dispatched": bool(inc is not None and inc.status.value == "in_progress" and crew is not None),

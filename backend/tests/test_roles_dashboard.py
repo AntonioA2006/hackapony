@@ -118,14 +118,35 @@ def test_operator_validates_and_dispatches_crew_closes(client):
     active = client.get("/api/v1/users/me/active-report", headers=cit).json()["active"]
     assert active["stage"] == 2 and active["dispatched"] is True
 
-    res = client.patch(f"/api/v1/incidents/{iid}", headers=crew, json={"status": "resolved"})
-    assert res.status_code == 200 and res.json()["closed_at"] is not None
-    # Reabrir es solo de supervisión
-    assert client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"status": "in_progress"}).status_code == 403
-    # El ticket ciudadano se liberó y puede reportar de nuevo
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=crew, json={"status": "resolved"}).status_code == 422
+    import io
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (16, 16), (9, 9, 9)).save(buf, "JPEG")
+    sent = client.post(
+        f"/api/v1/incidents/{iid}/resolution",
+        headers=crew,
+        data={"description": "Se cambió el tramo de tubo dañado", "minutes_spent": "40"},
+        files={"file": ("arreglo.jpg", buf.getvalue(), "image/jpeg")},
+    )
+    assert sent.status_code == 200, sent.text
+    assert sent.json()["status"] == "pending_verification"
+    assert sent.json()["resolution"]["minutes_spent"] == 40
+    # Quien reportó ya lo ve resuelto y no puede ver la foto de la reparación
+    assert client.get(f"/api/v1/incidents/{iid}/resolution/photo", headers=cit).status_code == 403
+    photo = client.get(f"/api/v1/incidents/{iid}/resolution/photo", headers=op)
+    assert photo.status_code == 200 and photo.headers["content-type"].startswith("image/")
     assert client.get("/api/v1/users/me/active-report", headers=cit).json()["active"] is None
     mine = client.get("/api/v1/users/me/reports", headers=cit).json()["items"]
     assert mine[0]["status"] == "resolved" and mine[0]["incident_status"] == "resolved"
+    queue = client.get("/api/v1/incidents?queue=verify", headers=op).json()["items"]
+    assert iid in [i["id"] for i in queue]
+    confirmed = client.post(f"/api/v1/incidents/{iid}/resolution/verify", headers=op)
+    assert confirmed.status_code == 200 and confirmed.json()["status"] == "resolved"
+    assert client.get(f"/api/v1/incidents/{iid}/resolution/photo", headers=op).status_code == 404
+    # Reabrir es solo de supervisión
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"status": "in_progress"}).status_code == 403
     _report(client, cit)
 
 

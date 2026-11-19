@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import email_verified, get_current_user, require_roles
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.domain.enums import CREW_ROLES, OPERATOR_ROLES, STAFF_ROLES, ReportStatus
+from app.domain.enums import CREW_ROLES, OPERATOR_ROLES, STAFF_ROLES, IncidentStatus, ReportStatus
 from app.models.entities import Incident, IncidentHistory, Report, ReportPhoto
 from app.schemas.common import PaginatedResponse
 from app.schemas.reports import HistoryItem, ReportCreate, ReportCreateResponse, ReportOut, ReportPatch, ReportPhotoOut
@@ -37,7 +37,7 @@ def active_report_of(db: Session, user_id) -> Report | None:
         .where(
             Report.user_id == user_id,
             Report.status.in_(ACTIVE_REPORT_STATUSES),
-            (Incident.id.is_(None)) | (Incident.status.notin_(["resolved", "dismissed"])),
+            (Incident.id.is_(None)) | (Incident.status.notin_(["resolved", "dismissed", "pending_verification"])),
         )
         .order_by(Report.created_at.desc())
         .limit(1)
@@ -60,6 +60,15 @@ def _coords(db: Session, report_id) -> tuple[float, float]:
     return row[0], row[1]
 
 
+def _citizen_incident_status(report: Report) -> str | None:
+    """Mientras el operador verifica, quien reportó ya ve el caso como resuelto."""
+    if report.incident is None:
+        return None
+    if report.incident.status == IncidentStatus.pending_verification:
+        return IncidentStatus.resolved.value
+    return report.incident.status.value
+
+
 def _to_out(db: Session, report: Report, suggestions=None) -> ReportOut:
     lat, lon = _coords(db, report.id)
     return ReportOut(
@@ -77,7 +86,7 @@ def _to_out(db: Session, report: Report, suggestions=None) -> ReportOut:
         created_at=report.created_at,
         reported_at=report.reported_at,
         leak_flow=report.leak_flow,
-        incident_status=report.incident.status.value if report.incident is not None else None,
+        incident_status=_citizen_incident_status(report),
         nearby_suggestions=suggestions or [],
     )
 

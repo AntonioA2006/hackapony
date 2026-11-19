@@ -19,7 +19,7 @@ export default function CrewOrdersPage() {
   });
   const done = useQuery({
     queryKey: ["crew-orders", "resolved", sup],
-    queryFn: () => apiFetch<{ items: Incident[]; total: number }>("/incidents?status=resolved&page_size=1"),
+    queryFn: () => apiFetch<{ items: Incident[]; total: number }>("/incidents?status=pending_verification,resolved&page_size=1"),
   });
 
   return (

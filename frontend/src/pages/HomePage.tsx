@@ -6,6 +6,7 @@ import { BarList } from "../shared/charts";
 import IncidentsMap from "../shared/map/IncidentsMap";
 import { useStatesGeo } from "../shared/region/api";
 import { ButtonLink, Card, CountUp, Stat } from "../shared/ui";
+import { Link } from "react-router-dom";
 
 type Zone = { municipality: string; state: string; count: number };
 type Overview = {
@@ -91,12 +92,12 @@ export default function HomePage() {
             <ButtonLink to={user ? "/reportar" : "/registro"}>Reportar problema</ButtonLink>
           </div>
         </div>
-        <div className="h-[220px] overflow-hidden rounded-feature shadow-float sm:h-[280px]">
+        <div className="surface-elevated h-[220px] overflow-hidden bg-[#0b1f33] sm:h-[280px]">
           <HeroMark />
         </div>
       </section>
 
-      <div className="overflow-hidden rounded-feature border border-line bg-card p-2 shadow-card">
+      <div className="surface-elevated overflow-hidden bg-white p-2">
         <IncidentsMap regions={geo.data} className="h-[260px] sm:h-[420px]" />
       </div>
 
@@ -161,16 +162,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="acerca" className="scroll-mt-24 rounded-feature border border-line bg-card p-8">
-        <h2 className="text-subheading">Acerca de Agua Alerta</h2>
+      <section className="surface-elevated p-8">
+        <h2 className="text-subheading">Una startup michoacana</h2>
         <p className="mt-3 max-w-3xl text-body text-warm">
-          Plataforma para que la ciudadanía reporte fugas y problemas de agua, y para que operadores y cuadrillas los
-          validen, asignen y cierren. La prioridad combina gravedad, corroboración, población de la zona y tiempo sin
-          atención. Los límites y el contexto de viviendas vienen de INEGI; los reportes son información ciudadana.
+          Agua Alerta se construye desde Michoacán para que una fuga tenga folio, prioridad y seguimiento hasta el cierre.
         </p>
+        <Link to="/nosotros" className="mt-4 inline-flex text-body font-medium text-cyan-edge hover:underline">
+          Sobre nosotros y aviso legal
+        </Link>
       </section>
 
-      <section className="rounded-feature border border-line bg-card p-8">
+      <section className="surface-elevated p-8">
         <h2 className="text-subheading">Lo que mostramos y lo que no</h2>
         <ul className="mt-4 grid gap-3 text-body text-warm md:grid-cols-2">
           <li>Los indicadores de agua son estadística oficial del Censo 2020; los reportes son información ciudadana.</li>
