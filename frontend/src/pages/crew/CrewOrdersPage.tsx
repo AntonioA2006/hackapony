@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { HelmetIcon } from "../../shared/ui/icons";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../../shared/api/client";
 import { useAuth } from "../../shared/auth/AuthContext";
@@ -55,7 +56,7 @@ export default function CrewOrdersPage() {
                 {[i.municipality_name, i.state_name].filter(Boolean).join(", ")} · Urgencia {Number(i.urgency_score).toFixed(0)}
                 {i.estimated_liters != null ? ` · ${fmtLiters(i.estimated_liters)} perdidos (est.)` : ""}
               </p>
-              {sup && <p className="mt-1 text-[12px] text-ink">👷 {i.assigned_to?.display_name ?? "Sin cuadrilla"}</p>}
+              {sup && <p className="mt-1 inline-flex items-center gap-1.5 text-[12px] text-ink"><HelmetIcon size={15} className="text-warm" /> {i.assigned_to?.display_name ?? "Sin cuadrilla"}</p>}
             </Link>
           </li>
         ))}

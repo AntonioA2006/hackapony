@@ -92,7 +92,7 @@ export default function ContactFab() {
         <p
           role="status"
           aria-live="polite"
-          className={`pointer-events-none absolute bottom-full mb-3 whitespace-nowrap rounded-full border border-line bg-card px-4 py-2 text-body font-medium text-ink shadow-float ${
+          className={`anim-drop pointer-events-none absolute bottom-full mb-3 whitespace-nowrap rounded-full border border-line bg-card px-4 py-2 text-body font-medium text-ink shadow-float ${
             expandLeft ? "right-0" : "left-0"
           } ${phase === "in" ? "anim-toast" : "anim-toast-out"}`}
         >

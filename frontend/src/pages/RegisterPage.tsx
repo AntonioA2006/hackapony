@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { CheckIcon } from "../shared/ui/icons";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/auth/AuthContext";
 import { authErrorMessage } from "../shared/firebase";
@@ -92,7 +93,7 @@ export default function RegisterPage() {
           <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px]">
             {strength.checks.map((c) => (
               <li key={c.text} className={c.ok ? "text-ok" : "text-ash"}>
-                {c.ok ? "✓" : "·"} {c.text}
+                <span className="inline-flex items-center gap-1">{c.ok ? <CheckIcon size={13} /> : <span className="inline-block h-1 w-1 rounded-full bg-current" aria-hidden />} {c.text}</span>
               </li>
             ))}
           </ul>

@@ -195,3 +195,38 @@
 /* Áreas seguras (notch, Dynamic Island, barra de gestos) */
 header.sticky { padding-top: env(safe-area-inset-top); }
 footer { padding-bottom: env(safe-area-inset-bottom); }
+
+/* ---------------------------------------------------------------- íconos y menús animados */
+.burger path { transform-box: fill-box; transform-origin: center; transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.2s ease; }
+.burger.is-open .burger-top { transform: translateY(5px) rotate(45deg); }
+.burger.is-open .burger-mid { opacity: 0; transform: scaleX(0.2); }
+.burger.is-open .burger-bot { transform: translateY(-5px) rotate(-45deg); }
+
+/* Colapsable: anima altura real con grid-template-rows (0fr ↔ 1fr), sin medir en JS */
+.aa-collapse { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.32s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.22s ease; }
+.aa-collapse > * { overflow: hidden; min-height: 0; }
+.aa-collapse.is-open { grid-template-rows: 1fr; opacity: 1; }
+.aa-collapse.is-open .stagger > * { animation: aa-fade-up 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.stagger > *:nth-child(4) { animation-delay: 0.16s; }
+.stagger > *:nth-child(5) { animation-delay: 0.2s; }
+.stagger > *:nth-child(n + 6) { animation-delay: 0.24s; }
+
+/* Desplegables y diálogos */
+@keyframes aa-drop-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.anim-drop { transform-origin: top center; animation: aa-drop-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* Tarjetas de tipo de fuga: el ícono "cobra vida" al elegirlo */
+@keyframes aa-drip { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(2px) scaleY(1.04); } 60% { transform: translateY(-1px); } }
+@keyframes aa-stream { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -6; } }
+@keyframes aa-wave { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(1.5px); } }
+.flow-card .flow-icon { transition: transform 0.25s ease, color 0.2s ease; }
+.flow-card:hover .flow-icon { transform: translateY(-2px); }
+.flow-card[data-selected="true"] .flow-icon { color: #0b84c6; }
+.flow-card[data-selected="true"] [data-flow="goteo"] { animation: aa-drip 1.6s ease-in-out infinite; transform-origin: bottom center; }
+.flow-card[data-selected="true"] .icon-stream { stroke-dasharray: 1.2 1.8; animation: aa-stream 0.6s linear infinite; }
+.flow-card[data-selected="true"] .icon-wave { transform-box: fill-box; animation: aa-wave 1.4s ease-in-out infinite; }
+.flow-card[data-selected="true"] .icon-wave-2 { animation-delay: 0.15s; }
+.flow-card[data-selected="true"] .icon-wave-3 { animation-delay: 0.3s; }

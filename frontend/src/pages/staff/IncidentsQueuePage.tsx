@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { HelmetIcon } from "../../shared/ui/icons";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../../shared/api/client";
 import { CATEGORY_LABELS, FLOW_LABELS, INCIDENT_STATUS_LABELS, fmtLiters, label } from "../../shared/labels";
@@ -134,7 +135,7 @@ export default function IncidentsQueuePage() {
               <PriorityTag band={i.priority_band} />
               {!i.validated && <Tag>Sin validar</Tag>}
               <Tag tone={i.status === "in_progress" ? "accent" : i.status === "resolved" ? "accent" : "neutral"}>{label(INCIDENT_STATUS_LABELS, i.status)}</Tag>
-              <span className="w-36 truncate text-right text-[12px] text-warm">{i.assigned_to ? `👷 ${i.assigned_to.display_name}` : "Sin asignar"}</span>
+              <span className="flex w-36 items-center justify-end gap-1.5 truncate text-right text-[12px] text-warm">{i.assigned_to ? <><HelmetIcon size={14} /> {i.assigned_to.display_name}</> : "Sin asignar"}</span>
             </Link>
           </li>
         ))}

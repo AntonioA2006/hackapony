@@ -39,13 +39,13 @@ export default function LocationConsentDialog() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-ink/40 p-4 sm:items-center" role="presentation">
+    <div className="anim-fade fixed inset-0 z-[2000] flex items-end justify-center bg-ink/40 p-4 sm:items-center" role="presentation">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="loc-title"
         aria-describedby="loc-desc"
-        className="w-full max-w-md rounded-feature border border-line bg-card p-6 shadow-float"
+        className="anim-pop w-full max-w-md rounded-feature border border-line bg-card p-6 shadow-float"
       >
         <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-sky text-cyan-edge" aria-hidden>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
