@@ -169,7 +169,7 @@ export default function StaffDashboardPage() {
         </section>
         <ChartCard
           title="Incidencias activas por prioridad"
-          note="Prioridad = gravedad + corroboración + población + tiempo sin atención"
+          note="Prioridad = gravedad + caudal + corroboración + población + tiempo sin atención (crítica o inundación nunca baja de alta)"
           table={{ columns: ["Prioridad", "Activas"], rows: (["critical", "high", "medium", "low"] as const).map((b) => [BAND_LABELS[b], d?.by_band.find((x) => x.key === b)?.total ?? 0]) }}
         >
           <SegmentedBar

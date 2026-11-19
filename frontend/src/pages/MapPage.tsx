@@ -6,10 +6,10 @@ import { isOperator } from "../shared/roles";
 import { useRegionCounts } from "../shared/staff/api";
 import { apiFetch } from "../shared/api/client";
 import { useAuth } from "../shared/auth/AuthContext";
-import { BAND_LABELS, CATEGORY_LABELS, fmtInt, fmtPct, label } from "../shared/labels";
+import { BAND_LABELS, CATEGORY_LABELS, fmtFixed, fmtHours, fmtInt, label } from "../shared/labels";
 import IncidentsMap, { MEXICO_BOUNDS, type MapIncident } from "../shared/map/IncidentsMap";
 import { BAND_COLORS, INCIDENT_LEGEND, regionIncidentColor, WATER_LEGEND } from "../shared/map/waterScale";
-import { useMunicipalities, useMunicipalitiesGeo, useStates, useStatesGeo, type Water } from "../shared/region/api";
+import { useMunicipalities, useMunicipalitiesGeo, useStates, useStatesGeo } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
 import { LocationPrompt, RegionSelect } from "../shared/region/RegionPicker";
 import QueryError from "../shared/ui/QueryError";
@@ -20,29 +20,65 @@ type Paginated<T> = { items: T[]; total: number };
 const toBounds = (b: [number, number, number, number] | null | undefined): LatLngBoundsExpression | null =>
   b ? [[b[1], b[0]], [b[3], b[2]]] : null;
 
-function WaterPanel({ title, water }: { title: string; water: Water | undefined }) {
+type ZoneStats = {
+  resolved: number;
+  satisfaction_pct: number | null;
+  avg_resolution_hours: number | null;
+  ratings: number;
+};
+
+function ZoneStatsPanel({ title, cve_ent, cvegeo }: { title: string; cve_ent: string | null; cvegeo: string | null }) {
+  const q = new URLSearchParams();
+  if (cvegeo) q.set("cvegeo", cvegeo);
+  else if (cve_ent) q.set("cve_ent", cve_ent);
+  const qs = q.toString();
+  const stats = useQuery({
+    queryKey: ["public-stats", cve_ent, cvegeo],
+    queryFn: () => apiFetch<ZoneStats>(`/statistics/public${qs ? `?${qs}` : ""}`),
+    placeholderData: keepPreviousData,
+  });
+  const d = stats.data;
+  const rows = [
+    {
+      icon: "fa-face-smile",
+      label: "Porcentaje de satisfacción",
+      value: d?.satisfaction_pct == null ? "—" : `${fmtFixed(d.satisfaction_pct)} %`,
+      note: d?.ratings ? `${fmtInt(d.ratings)} calificaciones` : "Aún no hay calificaciones",
+    },
+    {
+      icon: "fa-stopwatch",
+      label: "Tiempo medio de resolución",
+      value: fmtHours(d?.avg_resolution_hours),
+      note: "Promedio de las ya resueltas",
+    },
+    {
+      icon: "fa-circle-check",
+      label: "Total de incidencias resueltas",
+      value: d ? fmtInt(d.resolved) : "—",
+      note: "Cerradas como resueltas",
+    },
+  ];
   return (
     <div className="rounded-card border border-line bg-card p-5">
-      <p className="text-[12px] font-medium uppercase tracking-[0.025em] text-warm">Agua en viviendas · {title}</p>
-      {water ? (
-        <>
-          <p className="mt-2 font-display text-heading-sm tabular-nums">{fmtPct(water.pct_sin_agua_entubada)}</p>
-          <p className="text-body text-warm">de las viviendas no tiene agua entubada</p>
-          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
-            <dt className="text-warm">Viviendas habitadas</dt>
-            <dd className="text-right tabular-nums">{fmtInt(water.viviendas)}</dd>
-            <dt className="text-warm">Sin agua entubada</dt>
-            <dd className="text-right tabular-nums">{fmtInt(water.sin_agua_entubada)}</dd>
-            <dt className="text-warm">Con tinaco</dt>
-            <dd className="text-right tabular-nums">{fmtInt(water.con_tinaco)}</dd>
-            <dt className="text-warm">Con cisterna o aljibe</dt>
-            <dd className="text-right tabular-nums">{fmtInt(water.con_cisterna)}</dd>
-          </dl>
-        </>
+      <p className="text-[12px] font-medium uppercase tracking-[0.025em] text-warm">Atención · {title}</p>
+      {stats.isError ? (
+        <p className="mt-2 text-body text-warm">No se pudieron cargar las estadísticas.</p>
       ) : (
-        <p className="mt-2 text-body text-warm">Sin dato censal para esta zona (municipio creado después de 2020).</p>
+        <ul className="mt-3 space-y-4">
+          {rows.map((r) => (
+            <li key={r.label} className="flex items-start gap-3">
+              <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-cyan/10 text-cyan">
+                <i className={`fa-solid ${r.icon}`} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[13px] text-warm">{r.label}</p>
+                <p className="font-display text-heading-sm leading-tight tabular-nums">{r.value}</p>
+                <p className="text-[11px] text-ash">{r.note}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
-      <p className="mt-4 text-[11px] text-ash">Fuente: INEGI, Censo de Población y Vivienda 2020 (ITER).</p>
     </div>
   );
 }
@@ -152,24 +188,7 @@ export default function MapPage() {
     [munItem?.bbox, stateItem?.bbox, region.cve_ent],
   );
 
-  const national = useMemo(() => {
-    const items = states.data ?? [];
-    const viv = items.reduce((a, s) => a + (s.water?.viviendas ?? 0), 0);
-    const sin = items.reduce((a, s) => a + (s.water?.sin_agua_entubada ?? 0), 0);
-    if (!viv) return undefined;
-    return {
-      viviendas: viv,
-      sin_agua_entubada: sin,
-      con_agua_entubada: items.reduce((a, s) => a + (s.water?.con_agua_entubada ?? 0), 0),
-      con_tinaco: items.reduce((a, s) => a + (s.water?.con_tinaco ?? 0), 0),
-      con_cisterna: items.reduce((a, s) => a + (s.water?.con_cisterna ?? 0), 0),
-      pct_sin_agua_entubada: Math.round((10000 * sin) / viv) / 100,
-      reference_year: 2020,
-    } satisfies NonNullable<Water>;
-  }, [states.data]);
-
   const placeTitle = region.municipality_name ?? region.state_name ?? "México";
-  const water = region.cvegeo ? munItem?.water : region.cve_ent ? stateItem?.water : national;
   const fetched = incidents.data?.items ?? [];
   const list = fetched.filter(
     (inc) => (category === "all" || inc.primary_category === category) && (priority === "all" || inc.priority_band === priority),
@@ -264,7 +283,7 @@ export default function MapPage() {
           )}
         </div>
         <aside className="space-y-4">
-          <WaterPanel title={placeTitle} water={water ?? undefined} />
+          <ZoneStatsPanel title={placeTitle} cve_ent={region.cve_ent} cvegeo={region.cvegeo} />
           <Legend />
         </aside>
       </div>

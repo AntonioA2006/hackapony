@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.domain.enums import OPERATOR_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportCategory, ReportStatus, UserRole
-from app.models.entities import CitizenConfirmation, Incident, IncidentRating, Report
+from app.models.entities import CitizenConfirmation, Incident, Report
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
@@ -17,18 +17,35 @@ def _round2(value) -> float | None:
 
 
 @router.get("/public")
-def public_overview(db: Session = Depends(get_db)):
-    """Cifras públicas reales. Las zonas solo cuentan incidencias ya validadas."""
+def public_overview(
+    cve_ent: str | None = Query(None, pattern=r"^\d{2}$"),
+    cvegeo: str | None = Query(None, pattern=r"^\d{5}$"),
+    db: Session = Depends(get_db),
+):
+    """Cifras públicas reales, opcionalmente de un estado o municipio. Las zonas solo cuentan incidencias validadas."""
+    region_sql = ""
+    params: dict = {}
+    if cvegeo:
+        region_sql = "WHERE municipality_id IN (SELECT id FROM municipalities WHERE cvegeo = :cvegeo)"
+        params["cvegeo"] = cvegeo
+    elif cve_ent:
+        region_sql = "WHERE municipality_id IN (SELECT id FROM municipalities WHERE cve_ent = :cve_ent)"
+        params["cve_ent"] = cve_ent
     row = db.execute(
         text(
-            """
+            f"""
             SELECT count(*) FILTER (WHERE status = 'resolved') AS resolved,
                    count(*) FILTER (WHERE status NOT IN ('resolved', 'dismissed', 'pending_verification')) AS pending,
                    avg(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 3600)
                      FILTER (WHERE status = 'resolved' AND closed_at IS NOT NULL) AS avg_h
-            FROM incidents
+            FROM incidents {region_sql}
             """
-        )
+        ),
+        params,
+    ).mappings().one()
+    rating = db.execute(
+        text(f"SELECT avg(score) AS avg, count(*) AS n FROM incident_ratings WHERE incident_id IN (SELECT id FROM incidents {region_sql})"),
+        params,
     ).mappings().one()
     zones = db.execute(
         text(
@@ -44,14 +61,14 @@ def public_overview(db: Session = Depends(get_db)):
             """
         )
     ).mappings().all()
-    satisfaction = _round2(db.scalar(select(func.avg(IncidentRating.score))))
+    satisfaction = _round2(rating["avg"])
     return {
         "reports": int(db.scalar(select(func.count()).select_from(Report)) or 0),
         "pending": int(row["pending"] or 0),
         "resolved": int(row["resolved"] or 0),
         "satisfaction_pct": _round2(100 * satisfaction / 5) if satisfaction is not None else None,
         "avg_resolution_hours": _round2(row["avg_h"]),
-        "ratings": int(db.scalar(select(func.count()).select_from(IncidentRating)) or 0),
+        "ratings": int(rating["n"] or 0),
         "zones": [
             {"municipality": z["municipality"], "state": z["state"], "count": int(z["cnt"] or 0)} for z in zones
         ],

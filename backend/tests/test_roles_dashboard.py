@@ -229,3 +229,52 @@ def test_public_home_stats(client):
     assert isinstance(body["ratings"], int)
     assert isinstance(body["zones"], list)
     assert all({"municipality", "state", "count"} <= set(z) for z in body["zones"])
+
+
+def test_rejecting_grouped_report_deletes_its_photos(client, tmp_path, monkeypatch):
+    from sqlalchemy import select
+
+    from app.core import storage
+    from app.core.config import get_settings
+    from app.models.entities import IncidentHistory, ReportPhoto
+
+    storage.get_storage.cache_clear()
+    monkeypatch.setattr(get_settings(), "photos_path", str(tmp_path))
+    try:
+        _, cit = _user(UserRole.CIUDADANO)
+        _, op = _user(UserRole.OPERADOR)
+        rep = _report(client, cit)
+        assert rep["incident_id"]
+        buf = io.BytesIO()
+        Image.new("RGB", (20, 20), (1, 2, 3)).save(buf, "JPEG")
+        assert client.post(f"/api/v1/reports/{rep['id']}/photos", headers=cit, files={"file": ("a.jpg", buf.getvalue(), "image/jpeg")}).status_code == 201
+        assert any(p.is_file() for p in tmp_path.rglob("*"))
+
+        res = client.patch(f"/api/v1/reports/{rep['id']}", headers=op, json={"status": "rejected", "rejection_reason": "Foto no corresponde"})
+        assert res.status_code == 200, res.text
+        assert not any(p.is_file() for p in tmp_path.rglob("*"))
+        with SessionLocal() as db:
+            assert db.scalars(select(ReportPhoto).where(ReportPhoto.report_id == uuid.UUID(rep["id"]))).first() is None
+            assert db.scalars(
+                select(IncidentHistory).where(
+                    IncidentHistory.incident_id == uuid.UUID(rep["incident_id"]), IncidentHistory.event_type == "photos_purged"
+                )
+            ).first()
+    finally:
+        storage.get_storage.cache_clear()
+
+
+def test_critical_flooding_report_is_critical_priority(client):
+    _, cit = _user(UserRole.CIUDADANO)
+    _, op = _user(UserRole.OPERADOR)
+    rep = _report(client, cit, severity="critical", leak_flow="inundacion")
+    detail = client.get(f"/api/v1/incidents/{rep['incident_id']}/detail", headers=op).json()
+    assert detail["incident"]["priority_band"] == "critical"
+
+
+def test_public_stats_filter_by_region(client):
+    res = client.get("/api/v1/statistics/public", params={"cvegeo": "16053"})
+    assert res.status_code == 200, res.text
+    assert {"resolved", "satisfaction_pct", "avg_resolution_hours", "ratings"} <= set(res.json())
+    assert client.get("/api/v1/statistics/public", params={"cve_ent": "16"}).status_code == 200
+    assert client.get("/api/v1/statistics/public", params={"cvegeo": "x"}).status_code == 422
