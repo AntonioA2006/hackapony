@@ -270,3 +270,11 @@ def test_critical_flooding_report_is_critical_priority(client):
     rep = _report(client, cit, severity="critical", leak_flow="inundacion")
     detail = client.get(f"/api/v1/incidents/{rep['incident_id']}/detail", headers=op).json()
     assert detail["incident"]["priority_band"] == "critical"
+
+
+def test_public_stats_filter_by_region(client):
+    res = client.get("/api/v1/statistics/public", params={"cvegeo": "16053"})
+    assert res.status_code == 200, res.text
+    assert {"resolved", "satisfaction_pct", "avg_resolution_hours", "ratings"} <= set(res.json())
+    assert client.get("/api/v1/statistics/public", params={"cve_ent": "16"}).status_code == 200
+    assert client.get("/api/v1/statistics/public", params={"cvegeo": "x"}).status_code == 422
