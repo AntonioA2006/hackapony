@@ -15,5 +15,6 @@ backend/.venv/
 node_modules/
 frontend/dist/
 *.log
-.DS_Store.firebase/
+.DS_Store
+.firebase/
 frontend/vite.cloud.config.ts
