@@ -2,15 +2,22 @@ import enum
 
 
 class UserRole(str, enum.Enum):
-    CIUDADANO = "CIUDADANO"  # reporta y consulta el estado de sus reportes
-    TECNICO = "TECNICO"  # atiende incidencias: valida, toma, atiende y resuelve
-    ADMINISTRADOR = "ADMINISTRADOR"  # heredado: mismas capacidades que TECNICO
-    SUPERADMINISTRADOR = "SUPERADMINISTRADOR"  # supervisión: todo + gestión de técnicos y asignación
+    CIUDADANO = "CIUDADANO"  # reporta (un ticket activo a la vez) y consulta su estado
+    OPERADOR = "OPERADOR"  # despacho: ve todo, valida o descarta y envía a cuadrilla
+    CUADRILLA = "CUADRILLA"  # personal de campo: atiende las órdenes asignadas y las cierra
+    TECNICO = "TECNICO"  # heredado: equivale a OPERADOR
+    ADMINISTRADOR = "ADMINISTRADOR"  # heredado: equivale a OPERADOR
+    SUPERADMINISTRADOR = "SUPERADMINISTRADOR"  # supervisión: todo + asigna roles de operador/cuadrilla
 
 
-# Personal operativo (ve todas las incidencias, fotos y métricas)
-STAFF_ROLES = (UserRole.TECNICO, UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)
+# Despacho: ve todas las incidencias, sus fotos y las métricas
+OPERATOR_ROLES = (UserRole.OPERADOR, UserRole.TECNICO, UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)
+CREW_ROLES = (UserRole.CUADRILLA,)
+# Cualquier personal (despacho o campo); la cuadrilla solo ve lo que tiene asignado
+STAFF_ROLES = OPERATOR_ROLES + CREW_ROLES
 SUPERVISOR_ROLES = (UserRole.SUPERADMINISTRADOR,)
+# Roles que supervisión puede asignar
+ASSIGNABLE_ROLES = (UserRole.CIUDADANO, UserRole.OPERADOR, UserRole.CUADRILLA)
 
 
 class ReportCategory(str, enum.Enum):

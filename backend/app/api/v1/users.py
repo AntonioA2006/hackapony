@@ -6,9 +6,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import email_verified, get_current_user, require_roles
 from app.core.database import get_db
-from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, ReportStatus, UserRole
+from app.domain.enums import ASSIGNABLE_ROLES, CREW_ROLES, OPERATOR_ROLES, STAFF_ROLES, SUPERVISOR_ROLES, ReportStatus, UserRole
 from app.models.entities import Notification, Report, User
 from app.services.notifications import notify_user
 from app.schemas.auth import UserOut
@@ -47,6 +47,37 @@ def _report_to_out(db: Session, report: Report) -> ReportOut:
 @router.get("/me", response_model=UserOut)
 def me(user=Depends(get_current_user)):
     return UserOut.model_validate(user)
+
+
+@router.get("/me/active-report")
+def my_active_report(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Ticket vigente (bloquea crear otro) con su etapa: emitido → validado por operador → atendido por cuadrilla."""
+    from app.api.v1.reports import active_report_of
+
+    report = active_report_of(db, user.id)
+    if report is None:
+        return {"active": None, "email_verified": email_verified(user)}
+    inc = report.incident
+    stage = 1
+    if report.status in (ReportStatus.validated, ReportStatus.in_progress) or (inc is not None and inc.status.value in ("triaged", "in_progress")):
+        stage = 2
+    crew = db.get(User, inc.assigned_to_id) if inc is not None and inc.assigned_to_id else None
+    return {
+        "email_verified": email_verified(user),
+        "active": {
+            "id": str(report.id),
+            "public_id": report.public_id,
+            "title": report.title,
+            "status": report.status.value,
+            "incident_public_id": inc.public_id if inc is not None else None,
+            "incident_status": inc.status.value if inc is not None else None,
+            "urgency_score": float(inc.urgency_score) if inc is not None else None,
+            "stage": stage,
+            "dispatched": bool(inc is not None and inc.status.value == "in_progress" and crew is not None),
+            "crew_name": crew.display_name if crew else None,
+            "created_at": report.created_at,
+        },
+    }
 
 
 class ProfileUpdate(BaseModel):
@@ -204,8 +235,8 @@ def list_users(
 
 
 @router.get("/technicians", response_model=list[StaffUserOut])
-def list_technicians(user=Depends(require_roles(*STAFF_ROLES)), db: Session = Depends(get_db)):
-    """Personal que puede atender incidencias (para asignar y para ver carga de trabajo)."""
+def list_technicians(user=Depends(require_roles(*OPERATOR_ROLES)), db: Session = Depends(get_db)):
+    """Personal de despacho y de campo (para enviar a cuadrilla y ver carga de trabajo)."""
     rows = db.scalars(
         select(User).where(User.role.in_(STAFF_ROLES), User.is_active.is_(True)).order_by(User.display_name)
     ).all()
@@ -220,8 +251,8 @@ def change_role(
     db: Session = Depends(get_db),
 ):
     """Supervisión nombra técnicos (o los regresa a ciudadano) usando el ID que la persona ve en su perfil."""
-    if payload.role not in (UserRole.CIUDADANO, UserRole.TECNICO):
-        raise HTTPException(422, detail="Solo se puede asignar el rol de técnico o ciudadano")
+    if payload.role not in ASSIGNABLE_ROLES:
+        raise HTTPException(422, detail="Solo se puede asignar operador, cuadrilla o ciudadano")
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(404, detail="No existe una cuenta con ese ID")
@@ -229,8 +260,8 @@ def change_role(
         raise HTTPException(409, detail="No puedes cambiar tu propio rol")
     if target.role in SUPERVISOR_ROLES:
         raise HTTPException(403, detail="No se puede cambiar el rol de otra persona supervisora")
-    if payload.role == UserRole.CIUDADANO:
-        # Al dejar de ser técnico, sus casos abiertos vuelven a la cola sin asignar
+    if payload.role == UserRole.CIUDADANO or (target.role in CREW_ROLES and payload.role not in CREW_ROLES):
+        # Al dejar el puesto, sus casos abiertos vuelven a la cola sin asignar
         db.execute(
             text("UPDATE incidents SET assigned_to_id = NULL WHERE assigned_to_id = :u AND status NOT IN ('resolved','dismissed')"),
             {"u": str(target.id)},
@@ -242,7 +273,10 @@ def change_role(
         target.id,
         "role_changed",
         "Tu rol cambió",
-        "Ahora eres técnico: ya puedes ver y atender incidencias." if payload.role == UserRole.TECNICO else "Tu cuenta volvió a ser ciudadana.",
+        {
+            UserRole.OPERADOR: "Ahora eres operador: entra con “Entrar como operador” para validar y despachar incidencias.",
+            UserRole.CUADRILLA: "Ahora eres parte de una cuadrilla: entra con “Entrar como cuadrilla” para ver tus órdenes.",
+        }.get(payload.role, "Tu cuenta volvió a ser ciudadana."),
         {"from": old.value, "to": payload.role.value, "by": str(user.id)},
     )
     db.commit()

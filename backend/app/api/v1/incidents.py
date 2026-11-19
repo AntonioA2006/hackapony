@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus, UserRole
+from app.domain.enums import CREW_ROLES, OPERATOR_ROLES, STAFF_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus
 from app.models.entities import CitizenConfirmation, Incident, IncidentHistory, Municipality, Report, User
 from app.schemas.common import PaginatedResponse
 from app.schemas.incidents import AssigneeOut, ConfirmResponse, IncidentOut, IncidentPatch, PublicIncidentOut
@@ -27,7 +27,7 @@ _ROW_SQL = text(
            ST_Y(i.centroid::geometry) AS lat, ST_X(i.centroid::geometry) AS lon,
            ST_Y(i.public_location::geometry) AS pub_lat, ST_X(i.public_location::geometry) AS pub_lon,
            m.name AS municipality_name, m.cvegeo, m.cve_ent, s.name AS state_name,
-           EXISTS (SELECT 1 FROM reports r WHERE r.incident_id = i.id AND r.status = 'validated') AS validated,
+           EXISTS (SELECT 1 FROM reports r WHERE r.incident_id = i.id AND r.status IN ('validated','in_progress','resolved')) AS validated,
            u.id AS assignee_id, u.display_name AS assignee_name
     FROM incidents i
     LEFT JOIN municipalities m ON m.id = i.municipality_id
@@ -196,7 +196,7 @@ def confirm_incident(
 @router.get("/priority", response_model=list[IncidentOut])
 def priority_queue(
     limit: int = 20,
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     limit = min(max(limit, 1), 100)
@@ -221,9 +221,11 @@ def list_incidents(
     user=Depends(require_roles(*STAFF_ROLES)),
     db: Session = Depends(get_db),
 ):
-    """Cola de trabajo del personal, con filtros por estado, región, prioridad y asignación."""
+    """Cola de trabajo del personal. La cuadrilla solo ve las órdenes que tiene asignadas."""
     page_size = min(max(page_size, 1), 100)
     q = select(Incident)
+    if user.role in CREW_ROLES:
+        assigned = "me"
     if status_filter == "active":
         q = q.where(Incident.status.notin_([IncidentStatus.resolved, IncidentStatus.dismissed]))
     elif status_filter:
@@ -249,7 +251,7 @@ def list_incidents(
 @router.get("/{incident_id}", response_model=IncidentOut)
 def get_incident(
     incident_id: uuid.UUID,
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     incident = db.get(Incident, incident_id)
@@ -264,15 +266,17 @@ def incident_detail(
     user=Depends(require_roles(*STAFF_ROLES)),
     db: Session = Depends(get_db),
 ):
-    """Ficha completa para el personal: incidencia, reportes con sus fotos e historial."""
+    """Ficha completa para el personal: incidencia, reportes con sus fotos e historial.
+    La cuadrilla solo puede abrir las órdenes que tiene asignadas."""
     incident = db.get(Incident, incident_id)
-    if not incident:
+    if not incident or (user.role in CREW_ROLES and incident.assigned_to_id != user.id):
         raise HTTPException(404, detail="Incidencia no encontrada")
     reports = db.execute(
         text(
             """
             SELECT r.id, r.public_id, r.title, r.description, r.category::text AS category, r.severity::text AS severity,
                    r.leak_flow::text AS leak_flow, r.status::text AS status, r.address_reference, r.created_at,
+                   r.contact_phone,
                    ST_Y(r.location::geometry) AS lat, ST_X(r.location::geometry) AS lon, u.display_name AS reporter,
                    COALESCE(json_agg(json_build_object('id', p.id, 'mime_type', p.mime_type, 'size_bytes', p.size_bytes)
                             ORDER BY p.created_at) FILTER (WHERE p.id IS NOT NULL), '[]') AS photos
@@ -280,7 +284,7 @@ def incident_detail(
             JOIN users u ON u.id = r.user_id
             LEFT JOIN report_photos p ON p.report_id = r.id
             WHERE r.incident_id = :iid
-            GROUP BY r.id, u.display_name
+            GROUP BY r.id, u.display_name, r.contact_phone
             ORDER BY r.created_at
             """
         ),
@@ -304,7 +308,9 @@ def incident_detail(
     }
 
 
-TECH_STATUSES = {IncidentStatus.triaged, IncidentStatus.in_progress, IncidentStatus.resolved}
+# Qué estados puede fijar cada rol (supervisión: todos, incluido reabrir)
+OPERATOR_STATUSES = {IncidentStatus.triaged, IncidentStatus.in_progress, IncidentStatus.dismissed}
+CREW_STATUSES = {IncidentStatus.in_progress, IncidentStatus.resolved}
 
 
 @router.patch("/{incident_id}", response_model=IncidentOut)
@@ -318,46 +324,59 @@ def patch_incident(
     if not incident:
         raise HTTPException(404, detail="Incidencia no encontrada")
     supervisor = user.role in SUPERVISOR_ROLES
+    crew = user.role in CREW_ROLES
+    operator = user.role in OPERATOR_ROLES and not supervisor
+    if crew and incident.assigned_to_id != user.id:
+        raise HTTPException(404, detail="Incidencia no encontrada")
+    if crew and (payload.assigned_to_id or payload.assign_to_me or payload.validate_reports or payload.aggregated_severity):
+        raise HTTPException(403, detail="La cuadrilla solo puede actualizar el estado de sus órdenes")
     old = incident.status
     events: list[tuple[str, dict]] = []
 
+    if payload.validate_reports:
+        validated = 0
+        for r in incident.reports:
+            if r.status in (ReportStatus.received, ReportStatus.under_review):
+                r.status = ReportStatus.validated
+                validated += 1
+        if validated:
+            events.append(("reports_validated", {"count": validated}))
+
     if payload.status and payload.status != old:
-        if not supervisor:
-            if payload.status not in TECH_STATUSES:
-                raise HTTPException(403, detail="Solo supervisión puede descartar o reabrir incidencias")
-            if old in CLOSED_STATUSES:
-                raise HTTPException(403, detail="Solo supervisión puede reabrir una incidencia cerrada")
-            if incident.assigned_to_id not in (None, user.id):
-                raise HTTPException(403, detail="La incidencia está asignada a otro técnico")
+        if old in CLOSED_STATUSES and not supervisor:
+            raise HTTPException(403, detail="Solo supervisión puede reabrir una incidencia cerrada")
+        if operator and payload.status not in OPERATOR_STATUSES:
+            raise HTTPException(403, detail="La atención la cierra la cuadrilla asignada (o supervisión)")
+        if crew and payload.status not in CREW_STATUSES:
+            raise HTTPException(403, detail="La cuadrilla solo puede marcar en atención o atendida")
         incident.status = payload.status
         if payload.status in CLOSED_STATUSES:
             incident.closed_at = datetime.now(UTC)
         elif old in CLOSED_STATUSES:
             incident.closed_at = None
-        # Quien la pone en atención y no estaba asignada, la toma
-        if payload.status == IncidentStatus.in_progress and incident.assigned_to_id is None and user.role not in SUPERVISOR_ROLES:
-            incident.assigned_to_id = user.id
-            events.append(("assigned", {"to": str(user.id), "self": True}))
         events.append(("status_changed", {"from": old.value, "to": incident.status.value}))
 
     if payload.assign_to_me:
         if incident.assigned_to_id not in (None, user.id) and not supervisor:
-            raise HTTPException(409, detail="La incidencia ya está asignada a otro técnico")
+            raise HTTPException(409, detail="La incidencia ya está asignada")
         incident.assigned_to_id = user.id
         events.append(("assigned", {"to": str(user.id), "self": True}))
     elif payload.unassign:
-        if not supervisor and incident.assigned_to_id != user.id:
+        if not (supervisor or operator) and incident.assigned_to_id != user.id:
             raise HTTPException(403, detail="Solo puedes liberar incidencias asignadas a ti")
         incident.assigned_to_id = None
         events.append(("unassigned", {}))
     elif payload.assigned_to_id is not None:
-        if not supervisor:
-            raise HTTPException(403, detail="Solo supervisión puede asignar incidencias a otros")
-        tech = db.get(User, payload.assigned_to_id)
-        if not tech or tech.role not in STAFF_ROLES or not tech.is_active:
-            raise HTTPException(422, detail="La persona asignada debe ser técnico activo")
-        incident.assigned_to_id = tech.id
-        events.append(("assigned", {"to": str(tech.id)}))
+        target = db.get(User, payload.assigned_to_id)
+        allowed = CREW_ROLES if operator else STAFF_ROLES
+        if not target or target.role not in allowed or not target.is_active:
+            raise HTTPException(422, detail="Solo se puede enviar a una cuadrilla activa")
+        incident.assigned_to_id = target.id
+        events.append(("assigned", {"to": str(target.id), "name": target.display_name}))
+        # Enviar a cuadrilla = la incidencia pasa a "en atención" (despacho)
+        if incident.status in (IncidentStatus.open, IncidentStatus.triaged):
+            incident.status = IncidentStatus.in_progress
+            events.append(("status_changed", {"from": old.value, "to": incident.status.value}))
 
     if payload.aggregated_severity:
         incident.aggregated_severity = payload.aggregated_severity
@@ -393,7 +412,7 @@ def patch_incident(
 @router.get("/{incident_id}/history")
 def incident_history(
     incident_id: uuid.UUID,
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     rows = db.scalars(

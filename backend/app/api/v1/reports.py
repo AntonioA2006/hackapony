@@ -8,11 +8,11 @@ from fastapi.responses import Response
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import email_verified, get_current_user, require_roles
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, ReportStatus, UserRole
-from app.models.entities import IncidentHistory, Report, ReportPhoto
+from app.domain.enums import CREW_ROLES, OPERATOR_ROLES, STAFF_ROLES, ReportStatus
+from app.models.entities import Incident, IncidentHistory, Report, ReportPhoto
 from app.schemas.common import PaginatedResponse
 from app.schemas.reports import HistoryItem, ReportCreate, ReportCreateResponse, ReportOut, ReportPatch, ReportPhotoOut
 from app.services.grouping import nearby_public_suggestions, process_report_grouping
@@ -24,6 +24,31 @@ from app.services.spatial import point_in_mexico, point_wkt
 from app.utils.ids import new_public_id
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+ACTIVE_REPORT_STATUSES = (ReportStatus.received, ReportStatus.under_review, ReportStatus.validated, ReportStatus.in_progress)
+
+
+def active_report_of(db: Session, user_id) -> Report | None:
+    """Ticket vigente de la persona: un reporte que no se ha resuelto ni rechazado (y cuya incidencia sigue abierta)."""
+    return db.scalar(
+        select(Report)
+        .outerjoin(Incident, Incident.id == Report.incident_id)
+        .where(
+            Report.user_id == user_id,
+            Report.status.in_(ACTIVE_REPORT_STATUSES),
+            (Incident.id.is_(None)) | (Incident.status.notin_(["resolved", "dismissed"])),
+        )
+        .order_by(Report.created_at.desc())
+        .limit(1)
+    )
+
+
+def can_view_report(user, report: Report) -> bool:
+    """Quien reportó, despacho (operador/supervisión) o la cuadrilla asignada a su incidencia."""
+    if report.user_id == user.id or user.role in OPERATOR_ROLES:
+        return True
+    return user.role in CREW_ROLES and report.incident is not None and report.incident.assigned_to_id == user.id
 settings = get_settings()
 
 
@@ -66,6 +91,14 @@ def create_report(
 ):
     check_rate_limit(f"report:{user.id}", max_calls=10, window_seconds=3600)
     check_rate_limit(f"report-ip:{request.client.host if request.client else 'unknown'}", max_calls=30, window_seconds=3600)
+    if not email_verified(user):
+        raise HTTPException(403, detail="Verifica tu correo para poder reportar. Revisa tu bandeja (y spam) o pide un enlace nuevo.")
+    active = active_report_of(db, user.id)
+    if active is not None and user.role not in STAFF_ROLES:
+        raise HTTPException(
+            409,
+            detail=f"Ya tienes un reporte activo ({active.public_id}). Podrás crear otro cuando se resuelva.",
+        )
     if not point_in_mexico(db, payload.latitude, payload.longitude):
         raise HTTPException(422, detail="La ubicación debe estar dentro de México.")
     suggestions_raw = nearby_public_suggestions(db, payload.latitude, payload.longitude, payload.category)
@@ -88,6 +121,7 @@ def create_report(
         address_reference=payload.address_reference,
         reported_at=payload.reported_at,
         leak_flow=payload.leak_flow,
+        contact_phone=payload.contact_phone,
         status=ReportStatus.received,
     )
     db.add(report)
@@ -142,7 +176,7 @@ def list_reports(
     page: int = 1,
     page_size: int = 20,
     status: ReportStatus | None = None,
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     page_size = min(max(page_size, 1), 100)
@@ -164,7 +198,7 @@ def get_report(report_id: uuid.UUID, user=Depends(get_current_user), db: Session
     report = db.get(Report, report_id)
     if not report:
         raise HTTPException(404, detail="Reporte no encontrado")
-    if user.role == UserRole.CIUDADANO and report.user_id != user.id:
+    if not can_view_report(user, report):
         raise HTTPException(403, detail="Sin permiso")
     return _to_out(db, report)
 
@@ -179,7 +213,7 @@ def patch_report(
     report = db.get(Report, report_id)
     if not report:
         raise HTTPException(404, detail="Reporte no encontrado")
-    is_admin = user.role in STAFF_ROLES
+    is_admin = user.role in OPERATOR_ROLES  # validar/rechazar es de despacho
     if not is_admin:
         if report.user_id != user.id or report.status not in (ReportStatus.received,):
             raise HTTPException(403, detail="Sin permiso")
@@ -232,8 +266,10 @@ async def upload_photo(
     db: Session = Depends(get_db),
 ):
     report = db.get(Report, report_id)
-    if not report or (user.role == UserRole.CIUDADANO and report.user_id != user.id):
+    if not report or (report.user_id != user.id and user.role not in OPERATOR_ROLES):
         raise HTTPException(404, detail="Reporte no encontrado")
+    if not email_verified(user):
+        raise HTTPException(403, detail="Verifica tu correo para subir fotografías.")
     if report.status == ReportStatus.rejected:
         raise HTTPException(400, detail="Reporte rechazado")
     count = db.scalar(select(func.count()).where(ReportPhoto.report_id == report.id)) or 0
@@ -259,7 +295,7 @@ async def upload_photo(
 def list_photos(report_id: uuid.UUID, user=Depends(get_current_user), db: Session = Depends(get_db)):
     """Fotos del reporte: visibles para quien reportó y para el personal (nunca en el mapa público)."""
     report = db.get(Report, report_id)
-    if not report or (user.role not in STAFF_ROLES and report.user_id != user.id):
+    if not report or not can_view_report(user, report):
         raise HTTPException(404, detail="Reporte no encontrado")
     photos = db.scalars(select(ReportPhoto).where(ReportPhoto.report_id == report.id).order_by(ReportPhoto.created_at)).all()
     return [ReportPhotoOut(id=str(p.id), mime_type=p.mime_type, size_bytes=p.size_bytes, created_at=p.created_at) for p in photos]
@@ -276,8 +312,7 @@ def get_photo_content(
     photo = db.get(ReportPhoto, photo_id)
     if not report or not photo or photo.report_id != report.id:
         raise HTTPException(404, detail="No encontrado")
-    is_admin = user.role in STAFF_ROLES
-    if user.role == UserRole.CIUDADANO and report.user_id != user.id:
+    if not can_view_report(user, report):
         raise HTTPException(403, detail="Sin permiso")
     data = get_storage().get(photo.storage_key)
     if data is None:
@@ -290,7 +325,7 @@ def report_history(report_id: uuid.UUID, user=Depends(get_current_user), db: Ses
     report = db.get(Report, report_id)
     if not report:
         raise HTTPException(404, detail="Reporte no encontrado")
-    if user.role == UserRole.CIUDADANO and report.user_id != user.id:
+    if not can_view_report(user, report):
         raise HTTPException(403, detail="Sin permiso")
     items: list[HistoryItem] = []
     if report.incident_id:

@@ -200,7 +200,7 @@ def test_closing_incident_deletes_its_photos(client, tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings(), "photos_path", str(tmp_path))
     try:
         citizen = {"Authorization": f"Bearer {_user_token(UserRole.CIUDADANO)}"}
-        admin = {"Authorization": f"Bearer {_user_token(UserRole.ADMINISTRADOR)}"}
+        admin = {"Authorization": f"Bearer {_user_token(UserRole.SUPERADMINISTRADOR)}"}  # cierra: supervisión o cuadrilla
         rep = client.post(
             "/api/v1/reports",
             headers=citizen,
@@ -282,3 +282,18 @@ def test_report_blank_text_rejected(client):
         },
     )
     assert res.status_code == 422
+
+
+
+def test_unverified_firebase_account_cannot_report_or_upload(client, firebase_keys):
+    token = _id_token(firebase_keys, uuid.uuid4().hex, f"nv-{uuid.uuid4().hex[:8]}@example.com", verified=False)
+    h = {"Authorization": f"Bearer {token}"}
+    assert client.get("/api/v1/users/me", headers=h).status_code == 200  # puede entrar y ver su cuenta
+    res = client.post(
+        "/api/v1/reports",
+        headers=h,
+        json={"title": "Fuga sin verificar", "description": "Descripción suficientemente larga", "category": "broken_pipe",
+              "latitude": 19.5, "longitude": -100.0},
+    )
+    assert res.status_code == 403 and "Verifica" in res.json()["detail"]
+    assert client.get("/api/v1/users/me/active-report", headers=h).json()["email_verified"] is False

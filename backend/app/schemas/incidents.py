@@ -49,6 +49,8 @@ class IncidentPatch(BaseModel):
     assigned_to_id: uuid.UUID | None = None
     assign_to_me: bool = False
     unassign: bool = False
+    # Despacho: al enviar a cuadrilla, valida en el mismo paso los reportes pendientes de la incidencia
+    validate_reports: bool = False
 
 
 class UrgencyBreakdownOut(BaseModel):

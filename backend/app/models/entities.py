@@ -88,6 +88,7 @@ class Report(Base):
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     leak_flow: Mapped[LeakFlow | None] = mapped_column(Enum(LeakFlow, name="leak_flow", create_type=False))
+    contact_phone: Mapped[str | None] = mapped_column(String(15))
     municipality_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("municipalities.id"))
     census_area_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("census_areas.id"))
     reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

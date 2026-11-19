@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.firebase_auth import FirebaseTokenError, looks_like_firebase_token, verify_id_token
 from app.core.security import parse_token_user_id
-from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, UserRole
+from app.domain.enums import OPERATOR_ROLES, SUPERVISOR_ROLES, UserRole
 from app.models.entities import User
 
 security = HTTPBearer(auto_error=False)
@@ -56,7 +56,14 @@ def _user_from_firebase(token: str, db: Session, project_id: str) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cuenta sin email")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuario inactivo")
+    # Atributo de la petición (no se guarda): el token de Firebase dice si el correo está verificado
+    user.email_verified_now = ident.email_verified
     return user
+
+
+def email_verified(user: User) -> bool:
+    """Correo verificado según el token de esta petición. El login propio (desarrollo) se considera verificado."""
+    return bool(getattr(user, "email_verified_now", True))
 
 
 def get_current_user(
@@ -88,5 +95,5 @@ def require_roles(*roles: UserRole):
     return _dep
 
 
-RequireAdmin = Depends(require_roles(*STAFF_ROLES))
+RequireAdmin = Depends(require_roles(*OPERATOR_ROLES))
 RequireSuperAdmin = Depends(require_roles(UserRole.SUPERADMINISTRADOR))
