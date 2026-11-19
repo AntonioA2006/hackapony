@@ -14,9 +14,9 @@ from app.services.grouping import process_report_grouping
 from app.services.spatial import point_wkt
 
 USERS = [
-    ("ciudadano@ejemplo.test", "Ciudadano Demo", UserRole.CIUDADANO, "Ciudadano123!"),
-    ("admin@ejemplo.test", "Admin Demo", UserRole.ADMINISTRADOR, "Admin12345!"),
-    ("super@ejemplo.test", "Super Demo", UserRole.SUPERADMINISTRADOR, "Super12345!"),
+    ("ciudadano@example.com", "Ciudadano Demo", UserRole.CIUDADANO, "Ciudadano123!"),
+    ("admin@example.com", "Admin Demo", UserRole.ADMINISTRADOR, "Admin12345!"),
+    ("super@example.com", "Super Demo", UserRole.SUPERADMINISTRADOR, "Super12345!"),
 ]
 
 LAN_DEMO_REPORT_ID = "AA-LANDEM1"
@@ -24,7 +24,7 @@ LAN_DEMO_REPORT_ID = "AA-LANDEM1"
 
 def _seed_lan_map_demo(db) -> None:
     """Incidencia validada visible en el mapa publico (pruebas LAN)."""
-    user = db.scalar(select(User).where(User.email == "ciudadano@ejemplo.test"))
+    user = db.scalar(select(User).where(User.email == "ciudadano@example.com"))
     if not user:
         return
     report = db.scalar(select(Report).where(Report.public_id == LAN_DEMO_REPORT_ID))

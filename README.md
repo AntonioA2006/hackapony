@@ -37,7 +37,7 @@ Con Docker Desktop en marcha:
 
 Comparte la URL `http://10.x.x.x:3080` que imprime el script (misma red Wi‑Fi). Si el firewall bloquea, permite entrante TCP **3080**.
 
-Usuarios de demo: `ciudadano@ejemplo.test` / `Ciudadano123!`, `admin@ejemplo.test` / `Admin12345!`, `super@ejemplo.test` / `Super12345!` (`team-up.ps1` ejecuta el seed; incluye incidencia **AA-LANDEM1** en el mapa).
+Usuarios de demo: `ciudadano@example.com` / `Ciudadano123!`, `admin@example.com` / `Admin12345!`, `super@example.com` / `Super12345!` (`team-up.ps1` ejecuta el seed; incluye incidencia **AA-LANDEM1** en el mapa).
 
 Verificación rápida: `.\scripts\verify-lan.ps1`. Firewall (admin): `.\scripts\firewall-lan.ps1`.
 
@@ -48,3 +48,5 @@ Verificación rápida: `.\scripts\verify-lan.ps1`. Firewall (admin): `.\scripts\
 ```bash
 cd backend && pytest tests/test_priority.py -q
 ```
+
+INEGI E2E (wscatgeo en vivo): `.\scripts\inegi-e2e.ps1` — ver [docs/10-testing/inegi-e2e.md](docs/10-testing/inegi-e2e.md).
