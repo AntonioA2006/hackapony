@@ -53,7 +53,7 @@ def purge_incident_photos(db: Session, incident: Incident, actor_user_id: UUID |
 
 
 def purge_report_photos(db: Session, report: Report, actor_user_id: UUID | None) -> int:
-    """Para reportes sin incidencia (p. ej. `supply_issue`): borra sus fotos al resolverse o rechazarse."""
+    """Borra las fotos de un reporte rechazado (o resuelto sin incidencia, p. ej. `supply_issue`)."""
     photos = db.scalars(select(ReportPhoto).where(ReportPhoto.report_id == report.id)).all()
     storage = get_storage()
     deleted = 0
