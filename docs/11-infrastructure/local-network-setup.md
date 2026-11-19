@@ -77,6 +77,8 @@ VITE_API_BASE_URL=http://TU_IPV4:8000/api/v1
 
 Ver `frontend/.env.example`.
 
+Tiles: `VITE_MAP_TILE_URL` y `VITE_MAP_TILE_ATTRIBUTION` (alias `VITE_TILE_*`). Sin ellas el mapa usa Esri World Light Gray. En la imagen nginx se toman del `.env` de la raíz al construir `web`; en Vite, de `frontend/.env.local`. Firebase en el build de producción sale de `frontend/.env.production`, salvo que el `.env` de la raíz defina `VITE_FIREBASE_*`.
+
 ## Firewall de Windows (PowerShell como administrador)
 
 Solo red privada; no desactivar el firewall completo.
@@ -164,4 +166,4 @@ La regla debe incluir perfil **Public** (PCs con GPO suelen marcar Ethernet como
 | Login OK en PC, falla en móvil | Use `:3080`, no `:8081` con build antiguo. |
 | CORS en Vite LAN | Ejecute `configure-lan.ps1` o añada `http://<IP>:5173` a `CORS_ORIGINS`. |
 | Mapa vacío sin error | Normal si no hay incidencias con reporte **validado**; valide en admin. |
-| Tiles OSM no cargan | Red del dispositivo sin Internet o bloqueo de `tile.openstreetmap.org`. |
+| Tiles no cargan | El dispositivo necesita Internet hacia el host de `VITE_MAP_TILE_URL` (por defecto los servidores de Esri). Reconstruya `web` si cambió la URL. |

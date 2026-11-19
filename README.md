@@ -25,6 +25,19 @@ cd frontend && npm run dev
 - Web (Docker local): http://localhost:3080 o http://localhost:8081
 - Web (dev Vite): http://localhost:5173 — define `VITE_API_BASE_URL=http://localhost:8000/api/v1`
 
+### Tiles del mapa
+
+Sin variables, el mapa nacional usa Esri World Light Gray. Para otro proveedor define, antes de construir la imagen `web`:
+
+```bash
+VITE_MAP_TILE_URL=https://tiles.ejemplo/{z}/{x}/{y}.png
+VITE_MAP_TILE_ATTRIBUTION=© Ejemplo
+```
+
+Van en el `.env` de la raíz (Docker) o en `frontend/.env.local` (`npm run dev`). También se aceptan `VITE_TILE_URL` y `VITE_TILE_ATTRIBUTION` si `VITE_MAP_TILE_*` no está definida. Un cambio exige `docker compose up -d --build web` o reiniciar Vite.
+
+La imagen nginx toma Firebase de `frontend/.env.production`. Para sustituir esas claves públicas en el build, define `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID` y `VITE_FIREBASE_APP_ID` en el `.env` de la raíz. Si no están, se conserva el archivo de producción. `npm run dev` sin esas variables sigue usando el login de la API.
+
 Documentación detallada: [docs/11-infrastructure/local-network-setup.md](docs/11-infrastructure/local-network-setup.md).
 
 ### Pruebas en equipo (Windows)
