@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: agua
+          POSTGRES_PASSWORD: agua_secret
+          POSTGRES_DB: agua_alerta
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agua -d agua_alerta"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://agua:agua_secret@localhost:5432/agua_alerta
+      JWT_SECRET: ci-test-access-secret-minimum-32-characters
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-minimum-32-chars
+      PHOTOS_PATH: /tmp/photos
+      RUN_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend deps
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Migrate
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Pytest
+        working-directory: backend
+        run: pytest tests/ -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build

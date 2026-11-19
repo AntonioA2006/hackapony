@@ -1,7 +1,5 @@
-import uuid
-from datetime import UTC, datetime
+from uuid import UUID
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,9 +7,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.domain.enums import UserRole
-from app.models.entities import CensusArea, DataImportRun, DataSourceCatalog, InegiIndicator, Municipality
-from geoalchemy2.shape import from_shape
-from shapely.geometry import shape
+from app.models.entities import CensusArea, DataSourceCatalog, InegiIndicator, Municipality
+from app.services.inegi_import import import_ageb, import_municipalities, relink_territorial_context
 
 router = APIRouter(tags=["inegi"])
 
@@ -30,6 +27,14 @@ def list_municipalities(
     ]
 
 
+@router.get("/municipalities/{cvegeo}")
+def get_municipality(cvegeo: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    mun = db.scalar(select(Municipality).where(Municipality.cvegeo == cvegeo))
+    if not mun:
+        raise HTTPException(404, detail="Municipio no encontrado")
+    return {"id": str(mun.id), "cvegeo": mun.cvegeo, "name": mun.name, "pob_total": mun.pob_total}
+
+
 @router.get("/census-areas")
 def list_census(
     cve_ent: str | None = None,
@@ -42,11 +47,35 @@ def list_census(
     page_size = min(max(page_size, 1), 100)
     q = select(CensusArea)
     if cve_ent:
-        q = q.where(CensusArea.cve_ent == cve_ent)
+        q = q.where(CensusArea.cve_ent == cve_ent.zfill(2))
     if cve_mun:
-        q = q.where(CensusArea.cve_mun == cve_mun)
+        q = q.where(CensusArea.cve_mun == cve_mun.zfill(3))
     rows = db.scalars(q.offset((page - 1) * page_size).limit(page_size)).all()
-    return [{"cvegeo": c.cvegeo, "pob_total": c.pob_total, "ambito": c.ambito} for c in rows]
+    return [
+        {
+            "id": str(c.id),
+            "cvegeo": c.cvegeo,
+            "pob_total": c.pob_total,
+            "ambito": c.ambito,
+            "cve_ent": c.cve_ent,
+            "cve_mun": c.cve_mun,
+        }
+        for c in rows
+    ]
+
+
+@router.get("/census-areas/{cvegeo}")
+def get_census_area(cvegeo: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.scalar(select(CensusArea).where(CensusArea.cvegeo == cvegeo))
+    if not row:
+        raise HTTPException(404, detail="AGEB no encontrada")
+    return {
+        "id": str(row.id),
+        "cvegeo": row.cvegeo,
+        "pob_total": row.pob_total,
+        "viviendas_habitadas": row.viviendas_habitadas,
+        "ambito": row.ambito,
+    }
 
 
 @router.get("/inegi/sources")
@@ -65,7 +94,7 @@ def sources(user=Depends(require_roles(UserRole.SUPERADMINISTRADOR)), db: Sessio
 
 @router.get("/inegi/indicators")
 def indicators(
-    municipality_id: uuid.UUID | None = None,
+    municipality_id: UUID | None = None,
     user=Depends(require_roles(UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)),
     db: Session = Depends(get_db),
 ):
@@ -86,76 +115,62 @@ def indicators(
     ]
 
 
-@router.post("/inegi/import/wscatgeo/{cve_ent}")
+@router.post("/inegi/import/wscatgeo/{cve_ent}/municipalities")
 async def import_wscatgeo_municipalities(
     cve_ent: str,
     user=Depends(require_roles(UserRole.SUPERADMINISTRADOR)),
     db: Session = Depends(get_db),
 ):
-    """Importa municipios de una entidad desde INEGI wscatgeo (datos oficiales en tiempo de consulta)."""
-    url = f"https://gaia.inegi.org.mx/wscatgeo/v2/geo/mgem/{cve_ent.zfill(2)}"
-    source = db.scalar(select(DataSourceCatalog).where(DataSourceCatalog.source_key == "wscatgeo_mgem"))
-    if not source:
-        source = DataSourceCatalog(
-            source_key="wscatgeo_mgem",
-            official_name="INEGI wscatgeo - AGEM",
-            institution="INEGI",
-            source_url="https://www.inegi.org.mx/servicios/catalogoUnico.html",
-            last_verified_at=datetime.now(UTC),
-        )
-        db.add(source)
-        db.flush()
-    run = DataImportRun(source_id=source.id, status="running")
-    db.add(run)
-    db.flush()
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-        features = data.get("features") or []
-        upserted = 0
-        for feat in features:
-            props = feat.get("properties") or {}
-            cvegeo = props.get("cvegeo") or props.get("CVEGEO")
-            if not cvegeo:
-                continue
-            geom = feat.get("geometry")
-            name = props.get("nomgeo") or props.get("NOMGEO") or "Sin nombre"
-            pob = props.get("pob_total")
-            try:
-                pob_int = int(pob) if pob not in (None, "") else None
-            except ValueError:
-                pob_int = None
-            cve_ent_v = str(props.get("cve_ent") or cve_ent).zfill(2)
-            cve_mun_v = str(props.get("cve_mun") or cvegeo[-3:]).zfill(3)
-            existing = db.scalar(select(Municipality).where(Municipality.cvegeo == str(cvegeo)))
-            shp = from_shape(shape(geom), srid=4326) if geom else None
-            if existing:
-                existing.name = name
-                existing.pob_total = pob_int
-                if shp is not None:
-                    existing.geom = shp
-            else:
-                db.add(
-                    Municipality(
-                        cve_ent=cve_ent_v,
-                        cve_mun=cve_mun_v,
-                        cvegeo=str(cvegeo),
-                        name=name,
-                        pob_total=pob_int,
-                        geom=shp,
-                    )
-                )
-            upserted += 1
-        run.status = "success"
-        run.finished_at = datetime.now(UTC)
-        run.stats = {"rows_upserted": upserted, "source_url": url}
-        db.commit()
-        return {"import_run_id": str(run.id), "rows_upserted": upserted}
+        return await import_municipalities(db, cve_ent)
     except Exception as exc:
-        run.status = "failed"
-        run.finished_at = datetime.now(UTC)
-        run.error_message = str(exc)
-        db.commit()
-        raise HTTPException(502, detail=f"Error importando INEGI: {exc}") from exc
+        raise HTTPException(502, detail=f"Error importando municipios INEGI: {exc}") from exc
+
+
+@router.post("/inegi/import/wscatgeo/{cve_ent}")
+async def import_wscatgeo_municipalities_legacy(
+    cve_ent: str,
+    user=Depends(require_roles(UserRole.SUPERADMINISTRADOR)),
+    db: Session = Depends(get_db),
+):
+    """Compatibilidad con ruta anterior."""
+    try:
+        return await import_municipalities(db, cve_ent)
+    except Exception as exc:
+        raise HTTPException(502, detail=f"Error importando municipios INEGI: {exc}") from exc
+
+
+@router.post("/inegi/import/wscatgeo/{cve_ent}/ageb")
+async def import_wscatgeo_ageb_ent(
+    cve_ent: str,
+    user=Depends(require_roles(UserRole.SUPERADMINISTRADOR)),
+    db: Session = Depends(get_db),
+):
+    """Importa AGEB urbana y rural de una entidad federativa."""
+    try:
+        return await import_ageb(db, cve_ent)
+    except Exception as exc:
+        raise HTTPException(502, detail=f"Error importando AGEB INEGI: {exc}") from exc
+
+
+@router.post("/inegi/import/wscatgeo/{cve_ent}/{cve_mun}/ageb")
+async def import_wscatgeo_ageb_municipality(
+    cve_ent: str,
+    cve_mun: str,
+    user=Depends(require_roles(UserRole.SUPERADMINISTRADOR)),
+    db: Session = Depends(get_db),
+):
+    """Importa AGEB de un municipio (recomendado para piloto)."""
+    try:
+        return await import_ageb(db, cve_ent, cve_mun)
+    except Exception as exc:
+        raise HTTPException(502, detail=f"Error importando AGEB INEGI: {exc}") from exc
+
+
+@router.post("/inegi/relink-territorial")
+def relink_territorial(
+    user=Depends(require_roles(UserRole.SUPERADMINISTRADOR)),
+    db: Session = Depends(get_db),
+):
+    """Reasigna municipio/AGEB a reportes e incidencias tras importación."""
+    return relink_territorial_context(db)
