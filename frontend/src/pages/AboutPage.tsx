@@ -56,6 +56,10 @@ export default function AboutPage() {
           Aviso legal
         </Link>
         <span className="mx-2 text-ash">·</span>
+        <Link to="/creditos" className="text-cyan-edge hover:underline">
+          Créditos
+        </Link>
+        <span className="mx-2 text-ash">·</span>
         <Link to="/mapa" className="text-cyan-edge hover:underline">
           Explorar el mapa
         </Link>
