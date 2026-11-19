@@ -12,46 +12,44 @@ def point_wkt(lat: float, lon: float) -> WKTElement:
     return WKTElement(f"POINT({lon} {lat})", srid=4326)
 
 
-def assign_territorial_context(db: Session, report_id: UUID, lat: float, lon: float) -> None:
+def locate(db: Session, lat: float, lon: float) -> tuple[UUID | None, UUID | None]:
+    """Devuelve (census_area_id, municipality_id) del punto; None si no hay cobertura territorial.
+
+    Punto-en-polígono con ST_Covers sobre geometry (los bordes cuentan como dentro);
+    desempate determinista por cvegeo si el punto cae en un borde compartido.
+    """
     wkt = f"SRID=4326;POINT({lon} {lat})"
     census = db.execute(
         text(
             """
             SELECT ca.id, ca.municipality_id
             FROM census_areas ca
-            WHERE ST_Intersects(ca.geom, ST_GeomFromEWKT(:wkt))
-            ORDER BY ST_Area(ST_Intersection(ca.geom, ST_GeomFromEWKT(:wkt))) DESC NULLS LAST
+            WHERE ST_Covers(ca.geom, ST_GeomFromEWKT(:wkt))
+            ORDER BY ca.cvegeo
             LIMIT 1
             """
         ),
         {"wkt": wkt},
     ).first()
-    municipality_id = None
-    census_area_id = None
     if census:
-        census_area_id, municipality_id = census
-    else:
-        mun = db.execute(
-            text(
-                """
-                SELECT m.id FROM municipalities m
-                WHERE m.geom IS NOT NULL AND ST_Intersects(m.geom::geometry, ST_GeomFromEWKT(:wkt))
-                LIMIT 1
-                """
-            ),
-            {"wkt": wkt},
-        ).first()
-        if mun:
-            municipality_id = mun[0]
-
-    db.execute(
+        return census[0], census[1]
+    mun = db.execute(
         text(
             """
-            UPDATE reports SET census_area_id = :ca, municipality_id = :mun WHERE id = :rid
+            SELECT m.id FROM municipalities m
+            WHERE m.geom IS NOT NULL AND ST_Covers(m.geom::geometry, ST_GeomFromEWKT(:wkt))
+            ORDER BY m.cvegeo
+            LIMIT 1
             """
         ),
-        {"ca": census_area_id, "mun": municipality_id, "rid": report_id},
-    )
+        {"wkt": wkt},
+    ).first()
+    return None, (mun[0] if mun else None)
+
+
+def assign_territorial_context(db: Session, report: Report, lat: float, lon: float) -> None:
+    """Asigna AGEB y municipio al reporte a través del ORM (sin UPDATE directo que deje el objeto obsoleto)."""
+    report.census_area_id, report.municipality_id = locate(db, lat, lon)
 
 
 def fetch_census_pob(db: Session, census_area_id: UUID | None) -> int | None:

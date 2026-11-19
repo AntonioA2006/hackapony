@@ -47,7 +47,7 @@ def _seed_lan_map_demo(db) -> None:
     )
     db.add(report)
     db.flush()
-    process_report_grouping(db, report, user.id)
+    process_report_grouping(db, report, lat, lon, user.id)
     report.status = ReportStatus.validated
     db.commit()
     print(f"Mapa LAN: reporte {LAN_DEMO_REPORT_ID} validado en CDMX.")

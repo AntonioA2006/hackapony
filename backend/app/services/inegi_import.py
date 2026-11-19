@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import CensusArea, DataImportRun, DataSourceCatalog, Municipality
 from app.services.priority import recalculate_incident_urgency
-from app.services.spatial import assign_territorial_context
+from app.services.spatial import assign_territorial_context, locate
 from app.models.entities import Incident, Report
 
 
@@ -193,13 +193,13 @@ async def import_ageb(
 
 def relink_territorial_context(db: Session) -> dict:
     reports_updated = 0
-    report_ids = db.scalars(select(Report.id)).all()
-    for rid in report_ids:
+    reports = db.scalars(select(Report)).all()
+    for report in reports:
         row = db.execute(
             text("SELECT ST_Y(location::geometry), ST_X(location::geometry) FROM reports WHERE id = :id"),
-            {"id": str(rid)},
+            {"id": str(report.id)},
         ).one()
-        assign_territorial_context(db, rid, row[0], row[1])
+        assign_territorial_context(db, report, row[0], row[1])
         reports_updated += 1
 
     incidents_updated = 0
@@ -209,33 +209,7 @@ def relink_territorial_context(db: Session) -> dict:
             text("SELECT ST_Y(centroid::geometry), ST_X(centroid::geometry) FROM incidents WHERE id = :id"),
             {"id": str(inc.id)},
         ).one()
-        wkt = f"SRID=4326;POINT({row[1]} {row[0]})"
-        census = db.execute(
-            text(
-                """
-                SELECT ca.id, ca.municipality_id
-                FROM census_areas ca
-                WHERE ST_Intersects(ca.geom, ST_GeomFromEWKT(:wkt))
-                ORDER BY ST_Area(ST_Intersection(ca.geom, ST_GeomFromEWKT(:wkt))) DESC NULLS LAST
-                LIMIT 1
-                """
-            ),
-            {"wkt": wkt},
-        ).first()
-        if census:
-            inc.census_area_id, inc.municipality_id = census
-        else:
-            mun = db.execute(
-                text(
-                    """
-                    SELECT m.id FROM municipalities m
-                    WHERE m.geom IS NOT NULL AND ST_Intersects(m.geom::geometry, ST_GeomFromEWKT(:wkt))
-                    LIMIT 1
-                    """
-                ),
-                {"wkt": wkt},
-            ).first()
-            inc.municipality_id = mun[0] if mun else None
+        inc.census_area_id, inc.municipality_id = locate(db, row[0], row[1])
         recalculate_incident_urgency(db, inc)
         incidents_updated += 1
 

@@ -11,7 +11,7 @@
 
 ```json
 {
-  "email": "ciudadano@ejemplo.test",
+  "email": "ciudadano@example.com",
   "password": "CadenaSegura12!",
   "display_name": "María López",
   "accept_terms": true
@@ -24,7 +24,7 @@
 {
   "user": {
     "id": "uuid",
-    "email": "ciudadano@ejemplo.test",
+    "email": "ciudadano@example.com",
     "display_name": "María López",
     "role": "CIUDADANO"
   },

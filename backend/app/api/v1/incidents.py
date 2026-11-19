@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
@@ -86,18 +87,22 @@ def confirm_incident(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(Incident, incident_id)
+    # Bloquea la fila: serializa confirmaciones concurrentes de la misma incidencia (D3)
+    incident = db.get(Incident, incident_id, with_for_update=True, populate_existing=True)
     if not incident or incident.status in (IncidentStatus.resolved, IncidentStatus.dismissed):
         raise HTTPException(404, detail="Incidencia no disponible")
-    exists = db.scalar(
-        select(CitizenConfirmation).where(
-            CitizenConfirmation.incident_id == incident.id, CitizenConfirmation.user_id == user.id
-        )
-    )
-    if exists:
+    inserted = db.execute(
+        pg_insert(CitizenConfirmation)
+        .values(id=uuid.uuid4(), incident_id=incident.id, user_id=user.id)
+        .on_conflict_do_nothing(constraint="citizen_confirmations_unique")
+        .returning(CitizenConfirmation.id)
+    ).first()
+    if inserted is None:
+        db.rollback()
         raise HTTPException(409, detail="Ya confirmaste esta incidencia")
-    db.add(CitizenConfirmation(incident_id=incident.id, user_id=user.id))
-    incident.confirmation_count += 1
+    incident.confirmation_count = Incident.confirmation_count + 1
+    db.flush()
+    db.refresh(incident, attribute_names=["confirmation_count"])
     recalculate_incident_urgency(db, incident)
     db.add(
         IncidentHistory(

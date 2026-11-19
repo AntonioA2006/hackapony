@@ -18,7 +18,7 @@ def client():
 
 
 def test_register_and_create_report(client):
-    email = f"pytest_{uuid.uuid4().hex[:8]}@example.com"
+    email = f"pytest-{uuid.uuid4().hex[:12]}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
         json={
