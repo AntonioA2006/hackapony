@@ -71,6 +71,8 @@ def test_inegi_import_relink_and_territorial_context(client: TestClient):
             "severity": "high",
             "latitude": 19.4326,
             "longitude": -99.1332,
+            "device_latitude": 19.4326,
+            "device_longitude": -99.1332,
         },
     )
     assert report.status_code == 201, report.text

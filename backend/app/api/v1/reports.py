@@ -20,7 +20,7 @@ from app.services.public_geo import public_coordinates
 from app.services.photo_retention import purge_report_photos
 from app.services.photo_sanitize import sanitize_photo
 from app.services.notifications import notify_user
-from app.services.spatial import point_in_mexico, point_wkt
+from app.services.spatial import MAX_REPORT_DISTANCE_M, distance_m, point_in_mexico, point_wkt
 from app.utils.ids import new_public_id
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -99,6 +99,10 @@ def create_report(
             409,
             detail=f"Ya tienes un reporte activo ({active.public_id}). Podrás crear otro cuando se resuelva.",
         )
+    if payload.device_latitude is None or payload.device_longitude is None:
+        raise HTTPException(422, detail="Activa tu ubicación: solo puedes reportar donde estás.")
+    if distance_m(payload.latitude, payload.longitude, payload.device_latitude, payload.device_longitude) > MAX_REPORT_DISTANCE_M:
+        raise HTTPException(422, detail="Ese punto está lejos de ti. Solo puedes reportar a menos de 250 m de donde estás.")
     if not point_in_mexico(db, payload.latitude, payload.longitude):
         raise HTTPException(422, detail="La ubicación debe estar dentro de México.")
     suggestions_raw = nearby_public_suggestions(db, payload.latitude, payload.longitude, payload.category)

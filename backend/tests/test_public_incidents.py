@@ -53,6 +53,8 @@ def _report_payload(lat: float, lon: float) -> dict:
         "severity": "high",
         "latitude": lat,
         "longitude": lon,
+        "device_latitude": lat,
+        "device_longitude": lon,
     }
 
 

@@ -9,9 +9,17 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.domain.enums import CREW_ROLES, OPERATOR_ROLES, STAFF_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus
-from app.models.entities import CitizenConfirmation, Incident, IncidentHistory, Municipality, Report, User
+from app.models.entities import CitizenConfirmation, Incident, IncidentHistory, IncidentRating, Municipality, Report, User
 from app.schemas.common import PaginatedResponse
-from app.schemas.incidents import AssigneeOut, ConfirmResponse, IncidentOut, IncidentPatch, PublicIncidentOut
+from app.schemas.incidents import (
+    AssigneeOut,
+    ConfirmResponse,
+    IncidentOut,
+    IncidentPatch,
+    PublicIncidentOut,
+    SatisfactionIn,
+    SatisfactionOut,
+)
 from app.services.notifications import notify_user
 from app.services.photo_retention import CLOSED_STATUSES, purge_incident_photos
 from app.domain.waste import estimated_liters
@@ -197,6 +205,29 @@ def staff_map_incidents(
         page_size=page_size,
         total=total,
     )
+
+
+@router.post("/{incident_id}/satisfaction", response_model=SatisfactionOut)
+def rate_incident(
+    incident_id: uuid.UUID,
+    payload: SatisfactionIn,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cualquier persona con cuenta puede calificar una incidencia (1 a 5)."""
+    incident = db.get(Incident, incident_id)
+    if not incident or incident.status == IncidentStatus.dismissed:
+        raise HTTPException(404, detail="Incidencia no disponible")
+    existing = db.scalar(
+        select(IncidentRating).where(IncidentRating.incident_id == incident.id, IncidentRating.user_id == user.id)
+    )
+    if existing:
+        existing.score = payload.score
+    else:
+        db.add(IncidentRating(incident_id=incident.id, user_id=user.id, score=payload.score))
+    db.commit()
+    avg = db.scalar(select(func.avg(IncidentRating.score)).where(IncidentRating.incident_id == incident.id))
+    return SatisfactionOut(score=payload.score, satisfaction_avg=round(float(avg), 2) if avg is not None else None)
 
 
 @router.post("/{incident_id}/confirm", response_model=ConfirmResponse, status_code=201)

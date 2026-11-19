@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../shared/api/client";
 import { CATEGORY_LABELS, FLOW_LABELS, label } from "../shared/labels";
@@ -47,6 +47,12 @@ function Progress({ status }: { status: string }) {
 }
 
 export default function MyReportsPage() {
+  const qc = useQueryClient();
+  const rate = useMutation({
+    mutationFn: ({ id, score }: { id: string; score: number }) =>
+      apiFetch(`/incidents/${id}/satisfaction`, { method: "POST", body: JSON.stringify({ score }) }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["public-stats"] }),
+  });
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["my-reports"],
     queryFn: () => apiFetch<{ items: Report[] }>("/users/me/reports"),
@@ -88,6 +94,22 @@ export default function MyReportsPage() {
                   <Progress status={r.status} />
                 </div>
               </Link>
+              {r.incident_id && (
+                <p className="mt-2 flex flex-wrap items-center gap-1 px-1 text-[12px] text-warm">
+                  Satisfacción
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className="min-h-11 min-w-8 rounded-full border border-line bg-card px-2 text-ink hover:border-muted"
+                      onClick={() => rate.mutate({ id: r.incident_id!, score: n })}
+                      aria-label={`Calificar ${r.public_id} con ${n} de 5`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </p>
+              )}
             </li>
           ))}
           {!data.items.length && (

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.domain.enums import IncidentStatus, LeakFlow, LeakSeverity, PriorityBand, ReportCategory
 
@@ -64,3 +64,12 @@ class UrgencyBreakdownOut(BaseModel):
 
 class ConfirmResponse(BaseModel):
     confirmation_count: int
+
+
+class SatisfactionIn(BaseModel):
+    score: int = Field(ge=1, le=5)
+
+
+class SatisfactionOut(BaseModel):
+    score: int
+    satisfaction_avg: float | None

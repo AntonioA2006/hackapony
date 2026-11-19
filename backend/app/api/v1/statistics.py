@@ -5,9 +5,40 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.domain.enums import OPERATOR_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus, UserRole
-from app.models.entities import CitizenConfirmation, Incident, Report
+from app.models.entities import CitizenConfirmation, Incident, IncidentRating, Report
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
+
+
+def _round2(value) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 2)
+
+
+@router.get("/public")
+def public_overview(db: Session = Depends(get_db)):
+    """Cifras que ve cualquier persona: resolución, tiempo medio y satisfacción."""
+    row = db.execute(
+        text(
+            """
+            SELECT count(*) FILTER (WHERE status = 'resolved') AS resolved,
+                   count(*) FILTER (WHERE status <> 'dismissed') AS considered,
+                   avg(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 3600)
+                     FILTER (WHERE status = 'resolved' AND closed_at IS NOT NULL) AS avg_h
+            FROM incidents
+            """
+        )
+    ).mappings().one()
+    considered = int(row["considered"] or 0)
+    resolved = int(row["resolved"] or 0)
+    satisfaction = db.scalar(select(func.avg(IncidentRating.score)))
+    return {
+        "resolved_pct": _round2(100 * resolved / considered) if considered else None,
+        "avg_resolution_hours": _round2(row["avg_h"]),
+        "satisfaction_avg": _round2(satisfaction),
+        "ratings": int(db.scalar(select(func.count()).select_from(IncidentRating)) or 0),
+    }
 
 
 @router.get("/summary")

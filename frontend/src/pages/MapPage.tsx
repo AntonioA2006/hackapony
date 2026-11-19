@@ -124,6 +124,16 @@ export default function MapPage() {
     },
   });
 
+  const rateMut = useMutation({
+    mutationFn: ({ id, score }: { id: string; score: number }) =>
+      apiFetch(`/incidents/${id}/satisfaction`, { method: "POST", body: JSON.stringify({ score }) }),
+    onSuccess: () => {
+      setNotice({ tone: "success", text: "Gracias: tu calificación ya cuenta en la satisfacción." });
+      void qc.invalidateQueries({ queryKey: ["public-stats"] });
+    },
+    onError: (e) => setNotice({ tone: "error", text: (e as Error).message }),
+  });
+
   const confirmMut = useMutation({
     mutationFn: (id: string) => apiFetch(`/incidents/${id}/confirm`, { method: "POST" }),
     onSuccess: () => {
@@ -226,6 +236,7 @@ export default function MapPage() {
             bounds={bounds}
             onViewportChange={setBbox}
             onConfirm={user ? (id) => confirmMut.mutate(id) : undefined}
+            onRate={user ? (id, score) => rateMut.mutate({ id, score }) : undefined}
             onRegionClick={(id, name) => {
               if (!region.cve_ent) {
                 setRegion({ cve_ent: id, state_name: name, cvegeo: null, municipality_name: null });
