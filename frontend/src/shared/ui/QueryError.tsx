@@ -1,4 +1,5 @@
 import { ApiConnectionError } from "../api/client";
+import { Button } from "./index";
 
 type Props = {
   error: unknown;
@@ -19,17 +20,9 @@ export default function QueryError({ error, onRetry, context = "default" }: Prop
   }
 
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900" role="alert">
-      <p className="font-medium">{message}</p>
-      {onRetry && (
-        <button
-          type="button"
-          className="mt-3 rounded bg-accent-600 px-3 py-1.5 text-sm text-white hover:bg-accent-700"
-          onClick={onRetry}
-        >
-          Reintentar
-        </button>
-      )}
+    <div className="flex flex-wrap items-center gap-3 rounded-card border border-ink/15 bg-card px-4 py-3" role="alert">
+      <p className="mr-auto text-body text-ink">{message}</p>
+      {onRetry && <Button onClick={onRetry}>Reintentar</Button>}
     </div>
   );
 }

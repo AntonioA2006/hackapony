@@ -28,7 +28,7 @@ M = 1 / 111_320
 
 def _random_point() -> tuple[float, float]:
     """Punto aleatorio en zona vacía para aislar cada prueba de datos previos."""
-    return random.uniform(17.0, 21.0), random.uniform(-104.0, -97.0)
+    return random.uniform(19.3, 21.0), random.uniform(-102.5, -98.6)  # centro del país, tierra firme
 
 
 def _make_user(role: UserRole = UserRole.CIUDADANO) -> str:
@@ -72,7 +72,7 @@ def _seed_ageb(min_lon: float, min_lat: float, max_lon: float, max_lat: float, p
                 """
                 INSERT INTO municipalities (id, cve_ent, cve_mun, cvegeo, name, geom, pob_total)
                 VALUES (gen_random_uuid(), '99', '999', :cvegeo, 'Pytest',
-                        ST_GeogFromText('SRID=4326;' || :wkt), :pob)
+                        ST_GeomFromText(:wkt, 4326), :pob)
                 RETURNING id
                 """
             ),

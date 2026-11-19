@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -42,6 +43,19 @@ def _report_to_out(db: Session, report: Report) -> ReportOut:
 
 @router.get("/me", response_model=UserOut)
 def me(user=Depends(get_current_user)):
+    return UserOut.model_validate(user)
+
+
+class ProfileUpdate(BaseModel):
+    display_name: str = Field(min_length=2, max_length=120)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(payload: ProfileUpdate, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Actualiza datos de perfil propios. Email y contraseña se cambian en Firebase Authentication."""
+    user.display_name = payload.display_name.strip()
+    db.commit()
+    db.refresh(user)
     return UserOut.model_validate(user)
 
 

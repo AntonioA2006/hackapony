@@ -40,6 +40,9 @@ jobs:
       - name: Migrate
         working-directory: backend
         run: alembic upgrade head
+      - name: Load INEGI seed (estados, municipios, agua)
+        working-directory: backend
+        run: python -m scripts.load_inegi_seed
       - name: Pytest
         working-directory: backend
         run: pytest tests/ -q

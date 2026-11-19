@@ -59,6 +59,19 @@ export function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
+/** Proveedor del token de acceso. Por defecto, el JWT propio; con Firebase, el ID token (se renueva solo). */
+type TokenProvider = () => Promise<string | null>;
+let tokenProvider: TokenProvider = async () => getToken();
+
+export function setTokenProvider(provider: TokenProvider) {
+  tokenProvider = provider;
+}
+
+export async function authHeader(): Promise<Record<string, string>> {
+  const token = await tokenProvider();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function setTokens(tokens: Tokens) {
   localStorage.setItem("access_token", tokens.access_token);
   localStorage.setItem("refresh_token", tokens.refresh_token);
@@ -100,22 +113,28 @@ async function tryRefreshSession(): Promise<boolean> {
   return refreshInFlight;
 }
 
-const CONNECT_HELP =
-  "No se pudo conectar con el servidor. Verifica que Agua Alerta esté ejecutándose y que estés conectado a la misma red.";
+const CONNECT_HELP = import.meta.env.PROD
+  ? "No pudimos conectar con el servidor. Si es la primera visita en un rato, está despertando: inténtalo de nuevo en unos segundos."
+  : "No se pudo conectar con el servidor. Verifica que Agua Alerta esté ejecutándose y que estés conectado a la misma red.";
 
-const FETCH_TIMEOUT_MS = 30_000;
+// El plan gratuito de la API se suspende sin tráfico y tarda ~50 s en despertar.
+const FETCH_TIMEOUT_MS = 70_000;
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const token = await tokenProvider();
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
 
   const url = `${getApiBase()}${path}`;
+  const callerSignal = options.signal;
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  callerSignal?.addEventListener("abort", abortFromCaller);
+  if (callerSignal?.aborted) controller.abort();
   const authRetry =
     !path.startsWith("/auth/login") &&
     !path.startsWith("/auth/register") &&
@@ -141,6 +160,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;
   } catch (e) {
+    if (callerSignal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
     if (e instanceof Error && e.name === "AbortError") {
       throw new ApiConnectionError(CONNECT_HELP, e);
     }
@@ -153,5 +175,6 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     throw e;
   } finally {
     window.clearTimeout(timeoutId);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
 }

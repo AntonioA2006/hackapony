@@ -1,7 +1,7 @@
 # Arquitectura de referencia — Agua Alerta (revisión senior)
 
 > **Propósito:** consolidar la especificación existente en una arquitectura ejecutable, tomar las decisiones que quedaron abiertas y corregir los puntos débiles detectados antes de escribir código.
-> **Estado:** revisado contra el MVP implementado en `main` (commit `43818b0`: API FastAPI, frontend React, Docker). La sección [15](#15-estado-del-código-actual-frente-a-esta-arquitectura) indica, para cada punto, si el código ya lo cumple, lo cumple a medias o lo contradice, con archivo y línea.
+> **Estado:** revisado contra `claude/lucid-lamport-mer5mm` (`173b35d`: Firebase Auth, cobertura nacional INEGI, purga de fotos, refresh con cookie y Supabase) más H7, D8 y H9. La sección [15](#15-estado-del-código-actual-frente-a-esta-arquitectura) indica, para cada punto, si el código ya lo cumple, lo cumple a medias o lo contradice.
 > **Relación con otros documentos:** este documento **no reemplaza** a los canónicos (diccionario de datos, endpoints, algoritmo de urgencia); los **complementa** y, donde hay conflicto, propone el cambio explícitamente en la sección [Hallazgos sobre la especificación actual](#12-hallazgos-sobre-la-especificación-actual) y como ADR nuevo.
 
 ---
@@ -289,13 +289,17 @@ El mapa público es el endpoint más consultado y el más expuesto. Se separa de
 - `Cache-Control: public, max-age=30` + `ETag`; el proxy absorbe picos (un municipio entero abriendo el mapa tras una noticia).
 - Fase 3, si se superan ~20k incidencias visibles: vector tiles con `ST_AsMVT`.
 
-### 8.2 Ofuscación de ubicación (decisión pendiente → se cierra)
+**D5 (hecho, sin renombrar la ruta).** El mapa llama `GET /api/v1/incidents/public?bbox=minLon,minLat,maxLon,maxLat`. El filtro usa `incidents.public_location` y el índice GiST `incidents_public_location_gix` (migración `005`), no el centroide. Cada respuesta trae como máximo 200 incidencias (las de mayor urgencia); sin `bbox` el mismo tope aplica, para no romper clientes viejos. El viewport se recorta a la zona de operación y se pide con debounce de 300 ms, cancelando la petición anterior. Clusters por `zoom`, ETag y la vista materializada siguen pendientes: con el índice y el tope el mapa nacional no necesita ese read model todavía.
 
-Se adopta jitter **determinista**: `public_location = snap a una malla de ~30 m + desplazamiento derivado de HMAC(secret, incident_id)`. Si fuera aleatorio por request, promediar varias consultas revelaría la ubicación exacta. Se calcula una vez al crear/mover la incidencia. Las fugas en vía pública no requieren más precisión para el ciudadano; el admin ve la ubicación real.
+### 8.2 Ofuscación de ubicación (cerrada en D5, ADR-016)
 
-### 8.3 Visibilidad en mapa público (decisión pendiente → se cierra)
+`public_location = snap a una malla de 0.00027° (~30 m de latitud) + desplazamiento dentro de la celda derivado de HMAC-SHA256(LOCATION_HMAC_SECRET, id)`. El resultado se redondea a 6 decimales y se guarda al crear la incidencia y cada vez que se recalcula el centroide. Si el jitter fuera aleatorio por request, promediar consultas revelaría el punto real; si el offset fuera una función pública del id, restarlo devolvería el centro de la celda. El admin y el dueño del reporte ven la ubicación real. `GET /reports/nearby` aplica la misma función (clave: id del reporte) porque es público y no autenticado. Rotar el secreto no reescribe filas ya guardadas: hay que recalcular el centroide o volver a correr el backfill.
+
+### 8.3 Visibilidad en mapa público (decisión pendiente)
 
 Se muestra una incidencia en cuanto tiene **≥ 1 reporte en `under_review` o `validated`**, con badge "sin validar" si ninguno está validado. Las incidencias con un único reporte de una cuenta de menos de 24 h **no** se publican hasta validación. Equilibra utilidad (la gente ve que su reporte "existe") contra abuso (cuentas recién creadas sembrando el mapa).
+
+En el código, un reporte de fuga se publica en cuanto se envía (`received` incluido). `awaiting_validation` es verdadero mientras ninguno de sus reportes esté `validated`. Un reporte `rejected` no mantiene el punto en el mapa. La regla de las cuentas de menos de 24 h no está hecha.
 
 ### 8.4 Fotografías
 
@@ -333,7 +337,7 @@ La estructura `features/` de `frontend-architecture.md` es correcta. Ajustes:
 - **TanStack Query** para estado de servidor; nada de duplicarlo en un store global. Estado de auth en un contexto mínimo (access token en memoria + refresh silencioso).
 - **Formulario de reporte resiliente**: borrador en `IndexedDB`, reintento con la misma `Idempotency-Key`. Fase 2: PWA con cola offline (muchos reportes se hacen en la calle con mala señal).
 - Mapa: `react-leaflet` + clusters del servidor en zoom bajo; `leaflet.markercluster` solo para el nivel de detalle.
-- Tiles OSM: la política de uso de tile.openstreetmap.org **no admite** tráfico de producción significativo. Para staging/producción usar un proveedor (MapTiler, Stadia, etc.) o servir tiles propios. → **ADR-014**.
+- Tiles: `VITE_MAP_TILE_URL` y `VITE_MAP_TILE_ATTRIBUTION` (alias `VITE_TILE_*`), incrustadas en el build de Vite. Si van vacías, el mapa nacional usa Esri World Light Gray. La política de uso de tile.openstreetmap.org **no admite** tráfico de producción significativo si se apunta ahí: en staging/producción el proveedor tiene que ser uno permitido (o tiles propios). → **ADR-014**.
 
 ---
 
@@ -404,7 +408,7 @@ Backups: PITR del proveedor + `pg_dump` lógico diario a otro proveedor/región;
 | ADR-013 | Agrupamiento síncrono con advisory locks y ancla fija | Propuesta |
 | ADR-014 | Proveedor de tiles para staging/producción | Propuesta |
 | ADR-015 | Refresh token opaco en cookie HttpOnly con rotación | Propuesta |
-| ADR-016 | Ubicación pública con jitter determinista (HMAC) | Propuesta |
+| ADR-016 | Ubicación pública con jitter determinista (HMAC) | Aceptada (D5) |
 | ADR-017 | Urgencia persistida con desglose y versión de política | Propuesta |
 | ADR-018 | Seudonimización ARCO compatible con inmutabilidad de reportes (enmienda ADR-003) | Propuesta |
 
@@ -427,7 +431,7 @@ Regla para extraer un módulo a servicio: solo cuando tenga **un equipo, un ritm
 
 ## 15. Estado del código actual frente a esta arquitectura
 
-Revisión de `backend/` y `frontend/` en `main` (`43818b0`). Leyenda: ✅ cumple · 🟡 parcial · ❌ pendiente o contradice.
+Revisión sobre `claude/lucid-lamport-mer5mm` (`173b35d`), con H7, D8 y H9 aplicados. El camino de producción es Firebase Auth. El JWT local conserva refresh en cookie HttpOnly, rotación y logout que revoca. Leyenda: ✅ cumple · 🟡 parcial · ❌ pendiente o contradice.
 
 ### 15.1 Hallazgos de §12 confirmados en el código
 
@@ -436,15 +440,15 @@ Revisión de `backend/` y `frontend/` en `main` (`43818b0`). Leyenda: ✅ cumple
 | H1 | ✅ corregido | `lock_grouping_area()` en `backend/app/services/grouping.py`: advisory locks sobre la celda de malla (0.01°) y sus 8 vecinas + `FOR UPDATE` en la incidencia | Test `test_concurrent_reports_same_spot_create_single_incident` (falla si se quita el lock) |
 | H2 | ❌ | `grouping.py:38` `recalc_centroid` mueve el centroide y la búsqueda mide contra él | Columna `anchor_location` (migración 002) y medir el radio contra ella |
 | H3 | ❌ | `app/services/priority.py` solo recalcula en eventos; no hay job periódico ni desglose persistido | Job en worker cada 15 min + columnas `urgency_breakdown`, `urgency_version` |
-| H6 | ❌ | `app/core/rate_limit.py:7` diccionario en memoria por proceso; además `/auth/login` no tiene límite | Contadores en PostgreSQL; limitar login (5/15 min) |
-| H7 | ❌ | `docker-compose.yml:33` ejecuta `alembic upgrade head` en el arranque de `api` | Servicio `migrate` one-off; `api` depende de él con `service_completed_successfully` |
-| H8 | ❌ | `frontend/src/shared/api/client.ts:14` guarda el refresh token en `localStorage`; **no existe endpoint `/auth/refresh`** (los tokens se guardan hasheados pero nunca se usan) y `logout` (`app/api/v1/auth.py:73`) no revoca nada | Implementar refresh con cookie HttpOnly y rotación; logout revoca la familia |
-| H9 | ❌ | `frontend/src/shared/map/IncidentsMap.tsx:47` usa `tile.openstreetmap.org` | URL de tiles por variable de entorno; proveedor en staging/prod |
-| H10 | ❌ | `app/api/v1/reports.py:234` confía en el `content_type` del cliente; no valida magic bytes ni elimina EXIF | Validar con Pillow, re-codificar (descarta EXIF) |
-| H11 | ❌ | `app/api/v1/incidents.py:89` incrementa confirmaciones sin considerar si quien confirma ya reportó | Excluir reportantes; contar usuarios distintos en `r` |
+| H6 | 🟡 | `app/core/rate_limit.py` guarda contadores en memoria del proceso. Login limitado (5/15 min por email y 20/15 min por IP); registro y `password-reset/request` también (5/15 min) | Contadores en PostgreSQL para que el límite valga con varias réplicas (§9) |
+| H7 | ✅ corregido | Servicio `migrate` (`alembic upgrade head` y `python -m scripts.load_inegi_seed`, `restart: "no"`). `api` depende de `db` healthy y de `migrate` con `service_completed_successfully`. El `CMD` de la API ya no migra | — |
+| H8 | 🟡 | Con `VITE_FIREBASE_*` y `FIREBASE_PROJECT_ID`, el SPA usa Firebase Auth y la API verifica el ID token (`firebase_auth.py`). En modo local hay cookie HttpOnly `agua_refresh`, `POST /auth/refresh` rota el token y `POST /auth/logout` lo revoca. El SPA además guarda el refresh en `localStorage` (`client.ts`) | Dejar el refresh solo en la cookie; en Firebase, la sesión la gestiona el SDK |
+| H9 | ✅ corregido | `tileConfig.ts`: `VITE_MAP_TILE_URL` / `VITE_MAP_TILE_ATTRIBUTION`, con alias `VITE_TILE_*`. Vacías → Esri World Light Gray. El build de `web` las recibe como build args y no pisa `frontend/.env.production` si vienen vacías | En staging/prod usar un proveedor permitido; el default de esta rama sigue siendo Esri |
+| H10 | ✅ corregido | `photos.sanitize_image` valida el contenido con Pillow y re-codifica (descarta EXIF). Los reportes pasan por `sanitize_photo` | — |
+| H11 | 🟡 | `corroboration_confirmation_count` excluye a quien ya reportó; las confirmaciones son únicas por usuario. `report_count` sigue siendo el número de filas de reportes, no de usuarios verificados distintos | Contar usuarios distintos en el factor de reportes |
 | H12 | ✅ corregido | `locate()` en `app/services/spatial.py` usa `ST_Covers` + desempate por `cvegeo` | — |
 | H13 | ❌ | `POST /reports` sin `Idempotency-Key` | Tabla `idempotency_keys` + dependencia FastAPI |
-| H4 | 🟡 | Se mantienen estados operativos en el reporte | Ver §7.2 al hacer la migración 002 |
+| H4 | 🟡 | Se mantienen estados operativos en el reporte | Ver §7.2. La migración `002` ya es `password_reset_tokens` y la `003` es regiones, Firebase y purga de fotos |
 | H5 | ❌ | `alembic/versions/001_initial_schema.py:225` `incident_history` con `ON DELETE CASCADE`: borrar una incidencia borra su auditoría | `ON DELETE RESTRICT` en historial; seudonimización en vez de borrado |
 
 ### 15.2 Defectos nuevos encontrados en la implementación
@@ -455,11 +459,11 @@ Revisión de `backend/` y `frontend/` en `main` (`43818b0`). Leyenda: ✅ cumple
 | D2 | Alta · ✅ corregido | `recalc_centroid()` | Al mover el centroide no se reasignaba `census_area_id` de la incidencia | Se reasigna con `locate()` sobre el nuevo centroide. Test `test_linked_report_reassigns_incident_context` |
 | D9 | **Crítica** · ✅ corregido | `link_report_to_incident()` | **Encontrado al escribir los tests:** la sesión usa `autoflush=False`, así que `recalc_centroid` no veía el reporte recién vinculado. `report_count`, el centroide y la gravedad agregada **nunca se actualizaban** al agrupar; el factor C de la urgencia quedaba congelado en 1 reporte | `db.flush()` antes de recalcular; recálculo en una sola consulta (`ST_Centroid(ST_Collect(...))`, que también resuelve D7) |
 | D3 | Media · ✅ corregido | `confirm_incident()` en `app/api/v1/incidents.py` | **Confirmado con test:** doble clic simultáneo → 500; 8 confirmaciones simultáneas → solo 2 contadas | `SELECT … FOR UPDATE` de la incidencia, `INSERT … ON CONFLICT DO NOTHING` y `UPDATE` atómico del contador. Tests `test_concurrent_confirmations_are_all_counted`, `test_double_click_confirmation_returns_409_not_500` |
-| D4 | Media | `app/main.py:43` | El handler global devuelve 500 **sin registrar la excepción** y con `request_id: null` | `logger.exception(...)` + middleware de `request_id` |
-| D5 | Media | `app/api/v1/incidents.py:55` | El mapa público no filtra por `bbox`, publica el centroide exacto e incluye incidencias sin ningún reporte validado | Endpoint `/public/incidents?bbox=&zoom=` sobre read model con `public_location` (§8) |
-| D6 | Baja | `incidents.py:171`, `:180` | Notifica una vez por reporte: un usuario con 2 reportes recibe 2 avisos; N+1 consultas | Notificar a `DISTINCT user_id` y mover el envío al outbox |
+| D4 | Media · ✅ corregido | `app/main.py` | El handler global devolvía 500 sin registrar la excepción y con `request_id` nulo | `logger.exception(...)` incluye el `request_id` del `RequestIdMiddleware` |
+| D5 | Media · ✅ corregido | `GET /incidents/public`, `IncidentsMap` / `MapPage` | El mapa pedía el listado completo y la respuesta traía el centroide exacto. (Exigir un reporte `validated` ya estaba.) | `bbox` validado, índice GiST sobre `public_location` (migración 005), snap ~30 m + HMAC, tope de 200. El mapa pide el viewport con debounce y cancela la petición anterior. Tests `test_public_geo.py`, `test_public_incidents.py` |
+| D6 | Baja | `incidents.py` (avisos al pasar a `in_progress` / `resolved`) | Notifica una vez por reporte: un usuario con 2 reportes recibe 2 avisos; N+1 consultas | Notificar a `DISTINCT user_id` y mover el envío al outbox |
 | D7 | Baja · ✅ corregido | `recalc_centroid()` | Hacía una consulta por reporte (N+1) | Una sola consulta con `ST_Centroid(ST_Collect(location::geometry))` |
-| D8 | Baja | `docker-compose.yml` | Postgres expuesto en `5432` del host, `--reload` y código montado como volumen: válido para dev, no debe llegar a staging | `compose.override.yml` solo para dev |
+| D8 | Baja · ✅ corregido | `docker-compose.yml` | Postgres en el host, `--reload` y el código montado son de desarrollo y no deben ir a staging | Viven en `compose.override.yml`, que Compose fusiona en local. El archivo base no publica `5432` ni recarga. Staging: `docker compose -f docker-compose.yml up -d --build` |
 
 ### 15.3 Lo que ya está bien encaminado
 
@@ -467,12 +471,18 @@ Revisión de `backend/` y `frontend/` en `main` (`43818b0`). Leyenda: ✅ cumple
 - ✅ `compute_urgency` puro en `app/domain/priority.py` con `now` inyectable y tests en `tests/test_priority.py`.
 - ✅ UNIQUE (`incident_id`, `user_id`) en confirmaciones; refresh tokens almacenados hasheados.
 - ✅ Verificación de propiedad del reporte en servicios para `CIUDADANO` (protección contra IDOR).
-- ✅ Agrupamiento síncrono en la misma transacción que crea el reporte (§5.1), aunque falta el lock.
+- ✅ Agrupamiento síncrono en la misma transacción que crea el reporte (§5.1), con el advisory lock de H1.
+- ✅ Rate limit en memoria en login, registro y solicitud de recuperación de contraseña (H6, aún parcial: no es un almacén compartido).
+- ✅ Recuperación de contraseña local (`POST /auth/password-reset/*`, migración `002`). Con Firebase, el SPA usa `sendPasswordResetEmail`.
+- ✅ Saneamiento de fotos (H10), `request_id` en errores no controlados (D4) y purga de archivos al cerrar un caso (`photo_retention.py`, columna `photos_purged_at` en la migración `003`).
+- ✅ Firebase Auth opcional junto al JWT local: el build de producción (`frontend/.env.production`) entra por Firebase; `npm run dev` sin esas variables sigue en la API.
+- ✅ Cobertura nacional: estados, municipios en `geometry`, indicadores de agua y `load_inegi_seed` idempotente. Ese comando corre en `migrate`, no en el arranque de la API.
+- ✅ Tiles por entorno (H9). El default de esta rama es Esri, no OpenStreetMap.
 
 ### 15.4 Orden de trabajo recomendado
 
 1. ~~**D1, D2, D3, D9, H1**: correctitud de datos~~ ✅ corregidos, con tests de integración en `backend/tests/test_grouping_integrity.py`.
-2. **H8, H6, H10, D4**: seguridad y operabilidad mínimas antes de exponerlo a ciudadanos reales.
-3. **H7, D8, H9**: separar configuración de dev y de staging.
-4. **H2, H3, H13, D5**: migración 002 (`anchor_location`, `public_location`, desglose de urgencia, idempotencia) y read model público.
+2. ~~**H10, D4**~~ ✅. **H6** sigue en memoria. **H8** en producción pasa por Firebase; el modo local ya rota y revoca, y todavía copia el refresh a `localStorage`.
+3. ~~**H7, D8, H9**~~ ✅. `compose.override.yml` es el modo local; el archivo base es el de demo/staging. `migrate` aplica el esquema y el paquete INEGI. Las tiles salen por `VITE_MAP_TILE_*`.
+4. **H2, H3, H13**: `anchor_location`, desglose de urgencia e idempotencia. **D5** ✅ (`public_location` en migración 005, bbox y tope en `/incidents/public`). `002`, `003` y `004` ya están usadas.
 5. Reorganizar el backend por módulos (§4) de forma incremental, empezando por extraer `territory`.

@@ -16,9 +16,11 @@ from app.models.entities import IncidentHistory, Report, ReportPhoto
 from app.schemas.common import PaginatedResponse
 from app.schemas.reports import HistoryItem, ReportCreate, ReportCreateResponse, ReportOut, ReportPatch, ReportPhotoOut
 from app.services.grouping import nearby_public_suggestions, process_report_grouping
+from app.services.public_geo import public_coordinates
+from app.services.photo_retention import purge_report_photos
 from app.services.photo_sanitize import sanitize_photo
 from app.services.notifications import notify_user
-from app.services.spatial import point_wkt
+from app.services.spatial import point_in_mexico, point_wkt
 from app.utils.ids import new_public_id
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -62,6 +64,8 @@ def create_report(
 ):
     check_rate_limit(f"report:{user.id}", max_calls=10, window_seconds=3600)
     check_rate_limit(f"report-ip:{request.client.host if request.client else 'unknown'}", max_calls=30, window_seconds=3600)
+    if not point_in_mexico(db, payload.latitude, payload.longitude):
+        raise HTTPException(422, detail="La ubicación debe estar dentro de México.")
     suggestions_raw = nearby_public_suggestions(db, payload.latitude, payload.longitude, payload.category)
     suggestions = [
         {
@@ -124,7 +128,9 @@ def nearby(
     for rid in ids:
         report = db.get(Report, rid)
         if report:
-            results.append(_to_out(db, report))
+            out = _to_out(db, report)
+            lat, lon = public_coordinates(out.latitude, out.longitude, report.id)
+            results.append(out.model_copy(update={"latitude": lat, "longitude": lon}))
     return results
 
 
@@ -187,6 +193,8 @@ def patch_report(
                 raise HTTPException(422, detail="Motivo requerido para rechazo")
             report.status = payload.status
             report.rejection_reason = payload.rejection_reason
+            if report.incident_id is None and payload.status in (ReportStatus.resolved, ReportStatus.rejected):
+                purge_report_photos(db, report, user.id)
             notify_user(
                 db,
                 report.user_id,

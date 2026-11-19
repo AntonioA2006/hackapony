@@ -34,7 +34,9 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Nulo para cuentas de Firebase Authentication (la contraseña la gestiona Firebase)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    firebase_uid: Mapped[str | None] = mapped_column(String(128), unique=True)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), default=UserRole.CIUDADANO)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -123,12 +125,15 @@ class Incident(Base):
         Enum(LeakSeverity, name="leak_severity", create_type=False),
     )
     centroid: Mapped[object] = mapped_column(Geography(geometry_type="POINT", srid=4326), nullable=False)
+    # Punto que ve el mapa público (snap ~30 m + jitter HMAC). El centroide real queda para operación.
+    public_location: Mapped[object] = mapped_column(Geography(geometry_type="POINT", srid=4326), nullable=False)
     report_count: Mapped[int] = mapped_column(Integer, default=0)
     confirmation_count: Mapped[int] = mapped_column(Integer, default=0)
     urgency_score: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     priority_band: Mapped[PriorityBand] = mapped_column(Enum(PriorityBand, name="priority_band"), default=PriorityBand.low)
     municipality_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("municipalities.id"))
     census_area_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("census_areas.id"))
+    photos_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -185,8 +190,34 @@ class Municipality(Base):
     cve_mun: Mapped[str] = mapped_column(String(3), nullable=False)
     cvegeo: Mapped[str] = mapped_column(String(9), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    geom: Mapped[object | None] = mapped_column(Geography(geometry_type="MULTIPOLYGON", srid=4326))
+    geom: Mapped[object | None] = mapped_column(Geometry(geometry_type="MULTIPOLYGON", srid=4326))
     pob_total: Mapped[int | None] = mapped_column(Integer)
+
+
+class State(Base):
+    __tablename__ = "states"
+
+    cve_ent: Mapped[str] = mapped_column(String(2), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    abbrev: Mapped[str | None] = mapped_column(String(20))
+    pob_total: Mapped[int | None] = mapped_column(Integer)
+    viviendas_habitadas: Mapped[int | None] = mapped_column(Integer)
+    geom: Mapped[object | None] = mapped_column(Geometry(geometry_type="MULTIPOLYGON", srid=4326))
+
+
+class WaterIndicator(Base):
+    """Disponibilidad de agua en viviendas, INEGI Censo 2020 (ITER), por entidad o municipio."""
+
+    __tablename__ = "water_indicators"
+
+    cvegeo: Mapped[str] = mapped_column(String(9), primary_key=True)
+    level: Mapped[str] = mapped_column(String(12), nullable=False)
+    viviendas: Mapped[int | None] = mapped_column(Integer)
+    con_agua_entubada: Mapped[int | None] = mapped_column(Integer)
+    sin_agua_entubada: Mapped[int | None] = mapped_column(Integer)
+    con_tinaco: Mapped[int | None] = mapped_column(Integer)
+    con_cisterna: Mapped[int | None] = mapped_column(Integer)
+    reference_year: Mapped[int] = mapped_column(Integer, default=2020)
 
 
 class CensusArea(Base):

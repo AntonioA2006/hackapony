@@ -86,3 +86,15 @@ def reports_within_radius(
     if exclude_user_id:
         q = q.where(Report.user_id != exclude_user_id)
     return db.scalars(q).all()
+
+def point_in_mexico(db: Session, lat: float, lon: float) -> bool:
+    """True si el punto cae en alguna entidad (polígonos INEGI). Si aún no hay estados cargados, no bloquea."""
+    loaded = db.execute(text("SELECT EXISTS (SELECT 1 FROM states)")).scalar()
+    if not loaded:
+        return True
+    return bool(
+        db.execute(
+            text("SELECT EXISTS (SELECT 1 FROM states WHERE ST_Covers(geom, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)))"),
+            {"lat": lat, "lon": lon},
+        ).scalar()
+    )

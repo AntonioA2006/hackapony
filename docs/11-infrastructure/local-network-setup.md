@@ -28,6 +28,8 @@ cd C:\ruta\hackapony
 .\scripts\team-up.ps1
 ```
 
+`team-up.ps1` ejecuta `docker compose up -d --build`. El servicio `migrate` aplica Alembic y carga el paquete nacional de INEGI; tiene que terminar bien antes de que arranque la API. La API ya no migra al iniciar. La imagen de :3080 usa Firebase Auth.
+
 | Quién | URL |
 |-------|-----|
 | Anfitrión | http://localhost:3080 |
@@ -44,9 +46,12 @@ El servidor escucha en `0.0.0.0` (`vite.config.ts`).
 
 ```powershell
 .\scripts\configure-lan.ps1
+docker compose up -d db
 cd backend
-# con DB Docker:
+# Postgres en localhost lo publica compose.override.yml
 $env:DATABASE_URL="postgresql+psycopg://agua:agua_secret@localhost:5432/agua_alerta"
+alembic upgrade head
+python -m scripts.load_inegi_seed
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 cd ..\frontend
 npm run dev
@@ -77,6 +82,8 @@ VITE_API_BASE_URL=http://TU_IPV4:8000/api/v1
 
 Ver `frontend/.env.example`.
 
+Tiles: `VITE_MAP_TILE_URL` y `VITE_MAP_TILE_ATTRIBUTION` (alias `VITE_TILE_*`). Sin ellas el mapa usa Esri World Light Gray. En la imagen nginx se toman del `.env` de la raíz al construir `web`; en Vite, de `frontend/.env.local`. Firebase en el build de producción sale de `frontend/.env.production`, salvo que el `.env` de la raíz defina `VITE_FIREBASE_*`.
+
 ## Firewall de Windows (PowerShell como administrador)
 
 Solo red privada; no desactivar el firewall completo.
@@ -94,7 +101,7 @@ New-NetFirewallRule -DisplayName "Agua Alerta Vite (5173)" -Direction Inbound `
 
 ## Causa habitual de `Failed to fetch` en el mapa
 
-El componente `MapPage` llama `GET /incidents/public` vía `apiFetch`. El mapa Leaflet/OSM suele cargar bien; el fallo casi siempre es la **petición a la API**:
+El componente `MapPage` llama `GET /incidents/public?bbox=…&page_size=200` (viewport, con debounce) vía `apiFetch`. Sin `bbox` la ruta sigue respondiendo, con tope de 200. El mapa Leaflet suele cargar bien; el fallo casi siempre es la **petición a la API**:
 
 1. Bundle con `http://localhost:8000/api/v1` abierto desde otro dispositivo (`localhost` = ese dispositivo).
 2. Vite en LAN sin CORS para `http://<IP>:5173`.
@@ -164,4 +171,4 @@ La regla debe incluir perfil **Public** (PCs con GPO suelen marcar Ethernet como
 | Login OK en PC, falla en móvil | Use `:3080`, no `:8081` con build antiguo. |
 | CORS en Vite LAN | Ejecute `configure-lan.ps1` o añada `http://<IP>:5173` a `CORS_ORIGINS`. |
 | Mapa vacío sin error | Normal si no hay incidencias con reporte **validado**; valide en admin. |
-| Tiles OSM no cargan | Red del dispositivo sin Internet o bloqueo de `tile.openstreetmap.org`. |
+| Tiles no cargan | El dispositivo necesita Internet hacia el host de `VITE_MAP_TILE_URL` (por defecto los servidores de Esri). Reconstruya `web` si cambió la URL. |

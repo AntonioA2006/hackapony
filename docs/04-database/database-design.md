@@ -66,6 +66,7 @@ Centroide = promedio ponderado de reportes o primer reporte (documentar en servi
 
 ```sql
 CREATE INDEX incidents_centroid_gix ON incidents USING GIST (centroid);
+CREATE INDEX incidents_public_location_gix ON incidents USING GIST (public_location);
 CREATE INDEX incidents_urgency_idx ON incidents (urgency_score DESC, status);
 ```
 

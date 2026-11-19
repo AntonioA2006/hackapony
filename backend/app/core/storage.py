@@ -2,6 +2,7 @@
 
 - LocalStorage: volumen en disco (desarrollo, Docker Compose).
 - S3Storage: cualquier servicio compatible con S3 (Supabase Storage, Cloudflare R2, MinIO).
+- SupabaseStorage: Supabase Storage por REST con la clave de servicio.
 """
 from functools import lru_cache
 from pathlib import Path
@@ -13,6 +14,7 @@ from app.core.config import get_settings
 class BlobStorage(Protocol):
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
     def get(self, key: str) -> bytes | None: ...
+    def delete(self, key: str) -> None: ...
 
 
 class LocalStorage:
@@ -34,6 +36,14 @@ class LocalStorage:
     def get(self, key: str) -> bytes | None:
         path = self._path(key)
         return path.read_bytes() if path.is_file() else None
+
+    def delete(self, key: str) -> None:
+        path = self._path(key)
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()  # carpeta del reporte, si quedó vacía
+        except OSError:
+            pass
 
 
 class S3Storage:
@@ -64,10 +74,51 @@ class S3Storage:
                 return None
             raise
 
+    def delete(self, key: str) -> None:
+        # S3 delete_object es idempotente: no falla si la clave ya no existe
+        self.client.delete_object(Bucket=self.bucket, Key=key)
+
+
+class SupabaseStorage:
+    """Supabase Storage por su API REST con la clave de servicio (sin claves S3)."""
+
+    def __init__(self, *, url: str, key: str, bucket: str) -> None:
+        import httpx
+
+        self.base = f"{url.rstrip('/')}/storage/v1/object/{bucket}"
+        # Lectura de objetos privados: ruta authenticated (sin caché pública de CDN)
+        self.read_base = f"{url.rstrip('/')}/storage/v1/object/authenticated/{bucket}"
+        headers = {"apikey": key}
+        if key.startswith("eyJ"):  # clave service_role clásica (JWT); las nuevas sb_secret_ van solo en apikey
+            headers["Authorization"] = f"Bearer {key}"
+        self.client = httpx.Client(headers=headers, timeout=30.0)
+
+    def put(self, key: str, data: bytes, content_type: str) -> None:
+        resp = self.client.post(
+            f"{self.base}/{key}", content=data, headers={"Content-Type": content_type, "x-upsert": "true"}
+        )
+        resp.raise_for_status()
+
+    def get(self, key: str) -> bytes | None:
+        resp = self.client.get(f"{self.read_base}/{key}", headers={"Cache-Control": "no-cache"})
+        if resp.status_code in (400, 404):
+            return None
+        resp.raise_for_status()
+        return resp.content
+
+    def delete(self, key: str) -> None:
+        resp = self.client.delete(f"{self.base}/{key}")
+        if resp.status_code not in (200, 204, 400, 404):
+            resp.raise_for_status()
+
 
 @lru_cache
 def get_storage() -> BlobStorage:
     s = get_settings()
+    if s.storage_backend == "supabase":
+        if not (s.supabase_url and s.supabase_service_key):
+            raise RuntimeError("STORAGE_BACKEND=supabase requiere SUPABASE_URL y SUPABASE_SERVICE_KEY")
+        return SupabaseStorage(url=s.supabase_url, key=s.supabase_service_key, bucket=s.s3_bucket)
     if s.storage_backend == "s3":
         if not (s.s3_access_key_id and s.s3_secret_access_key):
             raise RuntimeError("STORAGE_BACKEND=s3 requiere S3_ACCESS_KEY_ID y S3_SECRET_ACCESS_KEY")

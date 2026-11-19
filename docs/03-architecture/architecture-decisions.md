@@ -18,7 +18,7 @@
 | Tema | Opciones | Responsable futuro |
 |------|----------|-------------------|
 | Email transaccional | SMTP municipal vs. proveedor | Superadmin + Infra |
-| Anonimización coordenadas en mapa público | Jitter 20–50 m | Producto + Privacidad |
+| Anonimización coordenadas en mapa público | Cerrada: ADR-016, snap ~30 m + HMAC | Producto + Privacidad |
 | Cobertura geográfica piloto | Un municipio vs. estado | Stakeholders |
 
 Plantilla para nuevas ADR: [../13-decisions/adr-template.md](../13-decisions/adr-template.md).

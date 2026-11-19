@@ -1,7 +1,61 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/inter-tight";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-50 text-slate-900;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-canvas font-sans text-body text-ink antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-normal text-ink;
+  }
+  a {
+    @apply transition-colors;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-cyan ring-offset-2 ring-offset-canvas;
+  }
+}
+
+@layer components {
+  /* Única marca cromática dentro de un titular */
+  .highlight {
+    @apply rounded bg-sky px-2 py-0.5 text-cyan-edge;
+  }
+  .field {
+    @apply w-full rounded-input border border-muted bg-card px-3 py-2 text-body text-ink placeholder:text-ash focus:border-cyan focus:outline-none focus:ring-2 focus:ring-cyan/30 disabled:bg-canvas disabled:text-ash;
+  }
+  .field[aria-invalid="true"] {
+    @apply border-critical focus:border-critical focus:ring-critical/25;
+  }
+  .label {
+    @apply mb-1 block text-[13px] font-medium text-ink;
+  }
+  .hint {
+    @apply mt-1 text-[12px] text-warm;
+  }
+}
+
+/* Leaflet con la tipografía y los tonos del sistema */
+.leaflet-container {
+  font-family: inherit;
+  background: #eef3f7;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  border-radius: 10px;
+  box-shadow: rgba(0, 0, 0, 0.05) 0px 4px 16px 0px;
+  border: 1px solid #e1e8ef;
+}
+.leaflet-control-attribution {
+  font-size: 10px;
+  color: #556678;
 }

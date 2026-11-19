@@ -9,20 +9,20 @@
 
 | Capa | Fuente | Visible |
 |------|--------|---------|
-| Base | OSM tiles | Todos |
+| Base | `VITE_MAP_TILE_URL` (si falta: Esri World Light Gray) | Todos |
 | Incidencias públicas | API `incidents/public` | Ciudadano |
 | Incidencias admin | API `incidents` | Admin |
 | Pin edición | Local state | Formulario reporte |
 
 ## Atribución
 
-Texto OSM © contribuidores visible según licencia ODbL.
+`VITE_MAP_TILE_ATTRIBUTION` más el crédito de límites y agua de INEGI. Sin variable, la atribución es la de Esri World Light Gray (datos de base OSM).
 
 ## Interacciones
 
 - Click pin → popup con folio, categoría, estado, urgencia.
 - Doble click mapa en modo edición → mueve pin.
-- Bbox fetch al mover mapa (debounce 300 ms).
+- Bbox fetch al mover mapa (debounce 300 ms, petición anterior cancelada). El cliente recorta el viewport a la zona de operación antes de llamar a `GET /incidents/public?bbox=…&page_size=200`. Los marcadores usan la coordenada ofuscada (~30 m).
 
 ## Iconografía
 

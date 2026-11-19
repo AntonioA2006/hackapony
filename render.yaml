@@ -1,0 +1,47 @@
+# Blueprint de Render (plan gratuito) para la API de Agua Alerta.
+# Guía completa: docs/11-infrastructure/free-deployment.md
+services:
+  - type: web
+    name: agua-alerta-api
+    runtime: docker
+    plan: free
+    region: ohio # misma región que Supabase (us-east-2): menos latencia a la BD
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Plan gratuito sin pre-deploy: el arranque hace de release (migraciones + datos INEGI idempotentes)
+    dockerCommand: sh scripts/start-release.sh
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # PostgreSQL + PostGIS en Supabase, usuario dedicado agua_app vía session pooler (puerto 5432)
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Firebase Authentication
+      - key: FIREBASE_PROJECT_ID
+        value: agua-alerta-mx
+      # Solo el sitio público y sus canales de vista previa de Firebase (reemplaza el regex de red local)
+      - key: CORS_ORIGINS
+        value: https://agua-alerta-mx.web.app,https://agua-alerta-mx.firebaseapp.com
+      - key: CORS_ORIGIN_REGEX
+        value: ^https://agua-alerta-mx(--[a-z0-9-]+)?\.web\.app$
+      # Fotos en Supabase Storage (API REST con la clave de servicio; bucket privado report-photos)
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: S3_BUCKET
+        value: report-photos
+      - key: SUPABASE_URL
+        value: https://rvhhlhbzgjdfndlgxfxf.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      # Correo de quien administra; entra con Firebase usando ese correo (verificado)
+      - key: BOOTSTRAP_SUPERADMIN_EMAIL
+        sync: false
+      - key: PASSWORD_RESET_DEV_EXPOSE_TOKEN
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO

@@ -27,17 +27,24 @@ class Settings(BaseSettings):
         r"|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$"
     )
 
-    # Almacenamiento de fotos: "local" (volumen) o "s3" (Supabase Storage, Cloudflare R2, MinIO…)
+    # Almacenamiento de fotos: "local" (volumen), "supabase" (REST + clave de servicio) o "s3" (R2, MinIO…)
     storage_backend: str = "local"
     s3_endpoint_url: str | None = None
     s3_region: str = "us-east-1"
     s3_bucket: str = "report-photos"
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
+    supabase_url: str | None = None
+    supabase_service_key: str | None = None
 
-    # Crea un superadministrador al arrancar si no existe (solo se usa si ambos están definidos)
+    # Firebase Authentication: si se define, la API acepta ID tokens de Firebase (además del JWT propio)
+    firebase_project_id: str | None = None
+
+    # Superadministrador inicial: con solo el email, la persona entra vía Firebase con ese correo verificado
     bootstrap_superadmin_email: str | None = None
     bootstrap_superadmin_password: str | None = None
+    # Jitter de la ubicación pública (D5). Rotarlo no reescribe public_location ya guardada.
+    location_hmac_secret: str = "dev-location-hmac-secret-change-in-production"
     grouping_distance_m: float = 75.0
     duplicate_suggest_radius_m: float = 50.0
     priority_pop_ref: int = 5000
