@@ -69,6 +69,37 @@ export function clearTokens() {
   localStorage.removeItem("refresh_token");
 }
 
+export function getRefreshToken(): string | null {
+  return localStorage.getItem("refresh_token");
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function tryRefreshSession(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refresh_token = getRefreshToken();
+    if (!refresh_token) return false;
+    try {
+      const res = await fetch(`${getApiBase()}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token }),
+      });
+      if (!res.ok) return false;
+      const tokens = (await res.json()) as Tokens;
+      setTokens(tokens);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
 const CONNECT_HELP =
   "No se pudo conectar con el servidor. Verifica que Agua Alerta esté ejecutándose y que estés conectado a la misma red.";
 
@@ -85,9 +116,20 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const url = `${getApiBase()}${path}`;
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const authRetry =
+    !path.startsWith("/auth/login") &&
+    !path.startsWith("/auth/register") &&
+    !path.startsWith("/auth/refresh");
+
+  const doFetch = () =>
+    fetch(url, { ...options, headers, credentials: "include", signal: controller.signal });
 
   try {
-    const res = await fetch(url, { ...options, headers, signal: controller.signal });
+    let res = await doFetch();
+    if (res.status === 401 && authRetry && (await tryRefreshSession())) {
+      headers.set("Authorization", `Bearer ${getToken() || ""}`);
+      res = await doFetch();
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       const msg = err?.detail || err?.error?.message || res.statusText;

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { apiFetch, clearTokens, getToken, setTokens, type Tokens } from "../api/client";
+import { apiFetch, clearTokens, getRefreshToken, getToken, setTokens, type Tokens } from "../api/client";
 
 type User = { id: string; email: string; display_name: string; role: string };
 
@@ -8,7 +8,7 @@ type AuthState = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, display_name: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -46,10 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const refresh_token = getRefreshToken();
+    try {
+      await apiFetch("/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refresh_token }),
+      });
+    } catch {
+      // cerrar sesión local aunque falle la red
+    }
     clearTokens();
     setUser(null);
-    void apiFetch("/auth/logout", { method: "POST" }).catch(() => undefined);
   };
 
   return (

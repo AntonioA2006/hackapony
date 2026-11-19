@@ -3,7 +3,7 @@ import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.core.rate_limit import check_rate_limit
 from sqlalchemy import func, select
@@ -18,22 +18,47 @@ from app.core.security import (
     verify_password,
 )
 from app.domain.enums import UserRole
-from app.models.entities import PasswordResetToken, RefreshToken, User
+from app.models.entities import PasswordResetToken, User
 from app.schemas.auth import (
     AuthResponse,
     LoginRequest,
+    LogoutRequest,
     PasswordResetAccepted,
     PasswordResetConfirm,
     PasswordResetRequest,
+    RefreshRequest,
     RegisterRequest,
     TokenResponse,
     UserOut,
 )
+from app.services.refresh_tokens import find_valid_refresh_row, revoke_refresh_token, store_refresh_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    cfg = get_settings()
+    response.set_cookie(
+        key=cfg.jwt_refresh_cookie_name,
+        value=token,
+        httponly=True,
+        secure=cfg.jwt_cookie_secure,
+        samesite="lax",
+        max_age=cfg.jwt_refresh_ttl_days * 86400,
+        path="/api/v1/auth",
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    cfg = get_settings()
+    response.delete_cookie(key=cfg.jwt_refresh_cookie_name, path="/api/v1/auth")
+
+
+def _resolve_refresh_token(request: Request, body_token: str | None) -> str | None:
+    return body_token or request.cookies.get(get_settings().jwt_refresh_cookie_name)
 
 
 def _tokens_for_user(user: User) -> TokenResponse:
@@ -48,7 +73,7 @@ def _tokens_for_user(user: User) -> TokenResponse:
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+def register(payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     check_rate_limit(f"register:{request.client.host if request.client else 'unknown'}", max_calls=5, window_seconds=900)
     if not payload.accept_terms:
         raise HTTPException(status_code=400, detail="Debe aceptar términos")
@@ -65,12 +90,13 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
     db.commit()
     db.refresh(user)
     tokens = _tokens_for_user(user)
-    _store_refresh(db, user.id, tokens.refresh_token)
+    store_refresh_token(db, user.id, tokens.refresh_token)
+    _set_refresh_cookie(response, tokens.refresh_token)
     return AuthResponse(user=UserOut.model_validate(user), tokens=tokens)
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
     check_rate_limit(f"login-ip:{client_ip}", max_calls=20, window_seconds=900)
     check_rate_limit(f"login-email:{payload.email.lower()}", max_calls=5, window_seconds=900)
@@ -80,12 +106,46 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Usuario inactivo")
     tokens = _tokens_for_user(user)
-    _store_refresh(db, user.id, tokens.refresh_token)
+    store_refresh_token(db, user.id, tokens.refresh_token)
+    _set_refresh_cookie(response, tokens.refresh_token)
     return AuthResponse(user=UserOut.model_validate(user), tokens=tokens)
 
 
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_tokens(
+    request: Request,
+    response: Response,
+    payload: RefreshRequest = RefreshRequest(),
+    db: Session = Depends(get_db),
+):
+    raw = payload.refresh_token or request.cookies.get(get_settings().jwt_refresh_cookie_name)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Refresh token requerido")
+    row = find_valid_refresh_row(db, raw)
+    if not row:
+        raise HTTPException(status_code=401, detail="Refresh token inválido o expirado")
+    user = db.get(User, row.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Refresh token inválido o expirado")
+    row.revoked_at = datetime.now(UTC)
+    tokens = _tokens_for_user(user)
+    store_refresh_token(db, user.id, tokens.refresh_token, commit=False)
+    _set_refresh_cookie(response, tokens.refresh_token)
+    db.commit()
+    return tokens
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout():
+def logout(
+    request: Request,
+    response: Response,
+    payload: LogoutRequest = LogoutRequest(),
+    db: Session = Depends(get_db),
+):
+    raw = payload.refresh_token or request.cookies.get(get_settings().jwt_refresh_cookie_name)
+    if raw:
+        revoke_refresh_token(db, raw)
+    _clear_refresh_cookie(response)
     return None
 
 
@@ -127,9 +187,3 @@ def password_reset_confirm(payload: PasswordResetConfirm, db: Session = Depends(
     db.commit()
     return None
 
-
-def _store_refresh(db: Session, user_id, token: str) -> None:
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    expires = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_ttl_days)
-    db.add(RefreshToken(user_id=user_id, token_hash=token_hash, expires_at=expires))
-    db.commit()

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     jwt_refresh_secret: str = "dev-refresh-secret-change-in-production-32b"
     jwt_access_ttl_min: int = 15
     jwt_refresh_ttl_days: int = 7
+    jwt_refresh_cookie_name: str = "agua_refresh"
+    jwt_cookie_secure: bool = False
     photos_path: str = "./data/photos"
     host: str = "0.0.0.0"
     port: int = 8000
