@@ -194,3 +194,13 @@ def test_staff_detail_includes_report_photos(client, tmp_path, monkeypatch):
         assert client.get(f"/api/v1/reports/{rep['id']}/photos", headers=intrusa).status_code == 404
     finally:
         storage.get_storage.cache_clear()
+
+
+def test_public_home_stats(client):
+    res = client.get("/api/v1/statistics/public")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert isinstance(body["resolved"], int) and body["resolved"] >= 0
+    assert body["satisfaction_pct"] is None or 0 <= body["satisfaction_pct"] <= 100
+    assert body["avg_resolution_hours"] is None or body["avg_resolution_hours"] >= 0
+    assert isinstance(body["ratings"], int)

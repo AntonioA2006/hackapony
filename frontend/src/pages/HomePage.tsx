@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../shared/auth/AuthContext";
 import { apiFetch } from "../shared/api/client";
-import { fmtFixed } from "../shared/labels";
+import { fmtFixed, fmtInt } from "../shared/labels";
 import IncidentsMap from "../shared/map/IncidentsMap";
 import { useStatesGeo } from "../shared/region/api";
 import { ButtonLink, Card, Stat } from "../shared/ui";
 
 type Overview = {
-  resolved_pct: number | null;
+  resolved: number;
+  satisfaction_pct: number | null;
   avg_resolution_hours: number | null;
-  satisfaction_avg: number | null;
   ratings: number;
 };
 
@@ -64,16 +64,20 @@ export default function HomePage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Incidencias resueltas" value={stats ? `${fmtFixed(stats.resolved_pct)} %` : "—"} note="Del total, sin contar las descartadas" />
         <Stat
-          label="Tiempo promedio de resolución"
-          value={stats?.avg_resolution_hours == null ? "—" : `${fmtFixed(stats.avg_resolution_hours)} h`}
-          note="Desde que se abre hasta que se cierra"
+          label="Total de incidencias resueltas"
+          value={stats ? fmtInt(stats.resolved) : "—"}
+          note="Casos cerrados como atendidos"
         />
         <Stat
-          label="Satisfacción"
-          value={stats?.satisfaction_avg == null ? "—" : `${fmtFixed(stats.satisfaction_avg)} / 5`}
-          note={stats ? `${stats.ratings} calificaciones` : "Cualquier cuenta puede calificar"}
+          label="Porcentaje de satisfacción"
+          value={stats?.satisfaction_pct == null ? "—" : `${fmtFixed(stats.satisfaction_pct)} %`}
+          note={stats ? `${fmtInt(stats.ratings)} calificaciones` : "Cualquier cuenta puede calificar"}
+        />
+        <Stat
+          label="Tiempo de resolución"
+          value={stats?.avg_resolution_hours == null ? "—" : `${fmtFixed(stats.avg_resolution_hours)} h`}
+          note="Promedio desde que se abre hasta que se cierra"
         />
       </section>
 
