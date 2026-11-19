@@ -7,6 +7,7 @@ import { Button, ButtonLink, Spinner } from "./shared/ui";
 import ContactFab from "./shared/ui/ContactFab";
 import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import AboutPage from "./pages/AboutPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import MapPage from "./pages/MapPage";
@@ -112,9 +113,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       <a href="/#indicadores" className={textLink} onClick={() => setOpen(false)}>
         Estadísticas
       </a>
-      <a href="/#acerca" className={textLink} onClick={() => setOpen(false)}>
-        Acerca de
-      </a>
+      <NavLink to="/nosotros" className={navLink} onClick={() => setOpen(false)}>
+        Sobre nosotros
+      </NavLink>
       {supervisor && view === "operador" && (
         <NavLink to="/panel/equipo" className={navLink} onClick={() => setOpen(false)}>
           Equipo
@@ -208,7 +209,12 @@ function Shell({ children }: { children: React.ReactNode }) {
       <LocationConsentDialog />
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-page flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-warm sm:px-6">
-          <p>Agua Alerta · Reportes ciudadanos de fugas y problemas de agua potable.</p>
+          <p>
+            Agua Alerta · Startup michoacana ·{" "}
+            <Link to="/nosotros" className="underline hover:text-ink">
+              Sobre nosotros
+            </Link>
+          </p>
           <p>
             Límites territoriales e indicadores de agua:{" "}
             <a className="underline hover:text-ink" href="https://www.inegi.org.mx/temas/agua/" target="_blank" rel="noreferrer">
@@ -272,6 +278,7 @@ export default function App() {
       <Suspense fallback={<Spinner />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/nosotros" element={<AboutPage />} />
           <Route path="/mapa" element={<MapPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar" element={<ForgotPasswordPage />} />

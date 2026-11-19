@@ -6,6 +6,7 @@ import { BarList } from "../shared/charts";
 import IncidentsMap from "../shared/map/IncidentsMap";
 import { useStatesGeo } from "../shared/region/api";
 import { ButtonLink, Card, CountUp, Stat } from "../shared/ui";
+import { Link } from "react-router-dom";
 
 type Zone = { municipality: string; state: string; count: number };
 type Overview = {
@@ -161,13 +162,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="acerca" className="scroll-mt-24 rounded-feature border border-line bg-card p-8">
-        <h2 className="text-subheading">Acerca de Agua Alerta</h2>
+      <section className="rounded-feature border border-line bg-card p-8">
+        <h2 className="text-subheading">Una startup michoacana</h2>
         <p className="mt-3 max-w-3xl text-body text-warm">
-          Plataforma para que la ciudadanía reporte fugas y problemas de agua, y para que operadores y cuadrillas los
-          validen, asignen y cierren. La prioridad combina gravedad, corroboración, población de la zona y tiempo sin
-          atención. Los límites y el contexto de viviendas vienen de INEGI; los reportes son información ciudadana.
+          Agua Alerta se construye desde Michoacán para que una fuga tenga folio, prioridad y seguimiento hasta el cierre.
         </p>
+        <Link to="/nosotros" className="mt-4 inline-flex text-body font-medium text-cyan-edge hover:underline">
+          Sobre nosotros y aviso legal
+        </Link>
       </section>
 
       <section className="rounded-feature border border-line bg-card p-8">
