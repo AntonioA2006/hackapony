@@ -7,6 +7,7 @@ import IncidentsMap from "../shared/map/IncidentsMap";
 import { isInsideMexico, useMexicoOutline, useMunicipalities, useStates } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
 import { Button, Field, Notice, PageHeader } from "../shared/ui";
+import { GeoError, getBrowserPosition, parseCoordinate, reverseGeocode, searchAddress, type AddressResult } from "../shared/geo";
 import { fieldA11y, PHOTO_MAX_COUNT, validateLength, validatePhotos } from "../shared/validation";
 
 type Created = { id: string; public_id: string; incident_id: string | null; nearby_suggestions?: { public_id: string; distance_m: number }[] };
@@ -28,6 +29,18 @@ export default function ReportPage() {
   const [severity, setSeverity] = useState("medium");
   const [point, setPoint] = useState<[number, number] | null>(null);
   const [address, setAddress] = useState("");
+  // La dirección se autocompleta desde el punto mientras la persona no la edite a mano
+  const [addressAuto, setAddressAuto] = useState(true);
+  const [geoMsg, setGeoMsg] = useState<string | null>(null);
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<AddressResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [showCoords, setShowCoords] = useState(false);
+  const [latText, setLatText] = useState("");
+  const [lonText, setLonText] = useState("");
+  const [coordErr, setCoordErr] = useState<string | null>(null);
+  const [reverseBusy, setReverseBusy] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -67,13 +80,75 @@ export default function ReportPage() {
     if (next.length > PHOTO_MAX_COUNT) setPhotoWarn(`Solo se conservaron las primeras ${PHOTO_MAX_COUNT} fotografías.`);
   };
 
-  const useGps = () => {
-    setError("");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setPoint([pos.coords.latitude, pos.coords.longitude]),
-      () => setError("No se pudo obtener tu ubicación. Marca el punto en el mapa."),
-      { enableHighAccuracy: true, timeout: 15000 },
-    );
+  /** Cualquier origen (GPS, mapa, búsqueda, coordenadas) termina aquí. */
+  const choosePoint = (lat: number, lon: number) => {
+    setPoint([lat, lon]);
+    setGeoMsg(null);
+    setCoordErr(null);
+    setLatText(lat.toFixed(6));
+    setLonText(lon.toFixed(6));
+  };
+
+  // Al marcar o cambiar el punto, proponer la dirección (calle, colonia, C.P.) si la persona no la escribió.
+  useEffect(() => {
+    if (!point || !addressAuto) return;
+    const ctrl = new AbortController();
+    const t = window.setTimeout(async () => {
+      setReverseBusy(true);
+      try {
+        const label = await reverseGeocode(point[0], point[1], ctrl.signal);
+        if (label && !ctrl.signal.aborted) setAddress(label.slice(0, 200));
+      } catch {
+        // sin dirección sugerida: el punto sigue siendo válido
+      } finally {
+        if (!ctrl.signal.aborted) setReverseBusy(false);
+      }
+    }, 700);
+    return () => {
+      ctrl.abort();
+      window.clearTimeout(t);
+    };
+  }, [point, addressAuto]);
+
+  const useGps = async () => {
+    setGeoMsg(null);
+    setGpsBusy(true);
+    try {
+      const pos = await getBrowserPosition();
+      choosePoint(pos.lat, pos.lon);
+      if (pos.accuracy > 200) setGeoMsg(`Ubicación aproximada (±${Math.round(pos.accuracy)} m). Ajusta el punto en el mapa si hace falta.`);
+    } catch (err) {
+      setGeoMsg(err instanceof GeoError ? err.message : "No se pudo obtener tu ubicación. Marca el punto en el mapa.");
+    } finally {
+      setGpsBusy(false);
+    }
+  };
+
+  const runSearch = async () => {
+    if (query.trim().length < 3) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    setGeoMsg(null);
+    try {
+      setResults(await searchAddress(query));
+    } catch (err) {
+      setGeoMsg((err as Error).message);
+      setResults(null);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const applyCoords = () => {
+    const la = parseCoordinate(latText, "lat");
+    const lo = parseCoordinate(lonText, "lon");
+    if (la == null || lo == null) {
+      setCoordErr("Coordenadas no válidas para México (latitud 14 a 33.5, longitud −118.5 a −86.5). Ejemplo: 19.43260, −99.13320");
+      return;
+    }
+    choosePoint(la, lo);
   };
 
   const onSubmit = async (e: FormEvent) => {
@@ -146,6 +221,8 @@ export default function ReportPage() {
               setDescription("");
               setPhotos([]);
               setPoint(null);
+              setAddress("");
+              setAddressAuto(true);
             }}
           >
             Hacer otro reporte
@@ -198,8 +275,23 @@ export default function ReportPage() {
           <Field label="Descripción" hint="Desde cuándo ocurre, cuánta agua sale, si afecta el paso." error={show("description")} htmlFor="rep-desc" aside={`${description.trim().length}/2000`}>
             <textarea className="field" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} rows={4} {...fieldA11y("rep-desc", show("description"))} />
           </Field>
-          <Field label="Referencia del lugar (opcional)" error={show("address")} htmlFor="rep-addr">
-            <input className="field" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="Calle, número, entre calles" {...fieldA11y("rep-addr", show("address"))} />
+          <Field
+            label="Dirección o referencia"
+            hint={addressAuto && address ? "Sugerida a partir del punto en el mapa; puedes corregirla." : "Se completa sola al marcar el punto; también puedes escribirla."}
+            error={show("address")}
+            htmlFor="rep-addr"
+          >
+            <input
+              className="field"
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                setAddressAuto(e.target.value.trim() === "");
+              }}
+              maxLength={200}
+              placeholder={reverseBusy ? "Buscando la dirección del punto…" : "Calle, número, colonia, entre calles"}
+              {...fieldA11y("rep-addr", show("address"))}
+            />
           </Field>
           <Field
             label={`Fotografías (opcional, hasta ${PHOTO_MAX_COUNT})`}
@@ -245,26 +337,87 @@ export default function ReportPage() {
         </div>
 
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={useGps}>Usar mi ubicación</Button>
-            <p className="text-[13px] text-warm">
-              {point ? (
-                located.data ? (
-                  <>
-                    <span className="text-ink">{located.data.municipality?.name ?? "Municipio sin identificar"}</span>,{" "}
-                    {located.data.state.name}
-                  </>
-                ) : located.isError ? (
-                  "El punto está fuera del territorio cubierto."
-                ) : (
-                  "Identificando municipio…"
-                )
-              ) : (
-                "Toca el mapa para marcar el lugar exacto."
-              )}
-            </p>
+          <div className="rounded-card border border-line bg-card p-4">
+            <p className="label">Ubicación del problema</p>
+            <p className="mb-3 text-[12px] text-warm">Usa tu ubicación, busca una dirección, escribe coordenadas o toca el mapa.</p>
+            <div className="flex flex-wrap items-stretch gap-2">
+              <Button variant="dark" onClick={() => void useGps()} disabled={gpsBusy}>
+                {gpsBusy ? "Obteniendo ubicación…" : "Usar mi ubicación"}
+              </Button>
+              <div className="flex min-w-[240px] flex-1 gap-2">
+                <input
+                  className="field"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void runSearch();
+                    }
+                  }}
+                  placeholder="Buscar calle, colonia o lugar"
+                  aria-label="Buscar dirección"
+                />
+                <Button onClick={() => void runSearch()} disabled={searching}>
+                  {searching ? "Buscando…" : "Buscar"}
+                </Button>
+              </div>
+            </div>
+            {results && (
+              <ul className="mt-2 max-h-48 divide-y divide-line overflow-auto rounded-input border border-line" aria-label="Resultados de la búsqueda">
+                {results.length === 0 && <li className="px-3 py-2 text-[13px] text-warm">Sin resultados en México. Prueba con calle y municipio.</li>}
+                {results.map((r) => (
+                  <li key={`${r.lat},${r.lon}`}>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-[13px] text-ink hover:bg-canvas"
+                      onClick={() => {
+                        choosePoint(r.lat, r.lon);
+                        setResults(null);
+                      }}
+                    >
+                      {r.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" className="mt-3 text-[13px] text-cyan-edge hover:underline" onClick={() => setShowCoords((v) => !v)} aria-expanded={showCoords}>
+              {showCoords ? "Ocultar coordenadas" : "Escribir coordenadas manualmente"}
+            </button>
+            {showCoords && (
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <label className="w-36">
+                  <span className="label">Latitud</span>
+                  <input className="field font-mono" inputMode="decimal" value={latText} onChange={(e) => setLatText(e.target.value)} placeholder="19.43260" />
+                </label>
+                <label className="w-36">
+                  <span className="label">Longitud</span>
+                  <input className="field font-mono" inputMode="decimal" value={lonText} onChange={(e) => setLonText(e.target.value)} placeholder="-99.13320" />
+                </label>
+                <Button onClick={applyCoords}>Ubicar</Button>
+                {coordErr && <p className="w-full text-[12px] text-critical" role="alert">{coordErr}</p>}
+              </div>
+            )}
+            {geoMsg && <p className="mt-3 text-[13px] text-warm" role="status">{geoMsg}</p>}
           </div>
-          <IncidentsMap center={center} zoom={zoom} pin={point} pickMode onPick={(la, lo) => setPoint([la, lo])} className="h-[520px]" />
+          <p className="text-[13px] text-warm">
+            {point ? (
+              located.data ? (
+                <>
+                  Punto en <span className="text-ink">{located.data.municipality?.name ?? "municipio sin identificar"}</span>,{" "}
+                  {located.data.state.name}
+                </>
+              ) : located.isError ? (
+                <span className="text-critical">El punto está fuera de México.</span>
+              ) : (
+                "Identificando municipio…"
+              )
+            ) : (
+              "Aún no hay punto: toca el mapa en el lugar exacto del problema."
+            )}
+          </p>
+          <IncidentsMap center={center} zoom={zoom} pin={point} pickMode onPick={(la, lo) => choosePoint(la, lo)} className="h-[520px]" />
           {show("point") && <p className="text-[12px] text-critical" role="alert">{errors.point}</p>}
           {point && (
             <p className="font-mono text-[12px] text-ash">

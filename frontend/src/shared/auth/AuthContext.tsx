@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestPasswordReset = async (email: string) => {
     if (firebaseEnabled) {
-      await sendPasswordResetEmail(firebaseAuth(), email).catch((err) => {
+      await sendPasswordResetEmail(firebaseAuth(), email, { url: `${window.location.origin}/login` }).catch((err) => {
         // No revelar si la cuenta existe
         if ((err as { code?: string })?.code !== "auth/user-not-found") throw err;
       });

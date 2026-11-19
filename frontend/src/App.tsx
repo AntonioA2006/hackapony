@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { useAuth } from "./shared/auth/AuthContext";
 import { Button, ButtonLink, Spinner } from "./shared/ui";
+import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -182,6 +183,7 @@ export default function App() {
           <Route path="/mapa" element={<MapPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar" element={<ForgotPasswordPage />} />
+          <Route path="/auth/accion" element={<AuthActionPage />} />
           <Route path="/restablecer" element={<ResetPasswordPage />} />
           <Route path="/registro" element={<RegisterPage />} />
           <Route path="/reportar" element={priv(<ReportPage />)} />
