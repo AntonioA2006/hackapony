@@ -55,7 +55,9 @@ def list_states(response: Response, db: Session = Depends(get_db)):
                    ST_Y(ST_PointOnSurface(s.geom)) AS lat, ST_X(ST_PointOnSurface(s.geom)) AS lon,
                    w.viviendas, w.con_agua_entubada, w.sin_agua_entubada, w.con_tinaco, w.con_cisterna,
                    (SELECT count(*) FROM incidents i JOIN municipalities m ON m.id = i.municipality_id
-                     WHERE m.cve_ent = s.cve_ent AND i.status NOT IN ('resolved', 'dismissed')) AS open_incidents
+                     WHERE m.cve_ent = s.cve_ent AND i.status NOT IN ('resolved', 'dismissed')
+                       AND EXISTS (SELECT 1 FROM reports r WHERE r.incident_id = i.id AND r.status = 'validated')
+                   ) AS open_incidents
             FROM states s
             LEFT JOIN water_indicators w ON w.cvegeo = s.cve_ent
             ORDER BY s.cve_ent

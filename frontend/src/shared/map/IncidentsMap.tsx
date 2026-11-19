@@ -1,14 +1,12 @@
-import L from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, useMapEvents } from "react-leaflet";
+import L, { type LatLngBoundsExpression, type PathOptions } from "leaflet";
+import type { Feature, Geometry } from "geojson";
+import { useEffect, useMemo } from "react";
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { BAND_LABELS, CATEGORY_LABELS, fmtPct, label } from "../labels";
+import type { RegionFeatureCollection, Water } from "../region/api";
+import { BAND_RADIUS, waterColor } from "./waterScale";
 
-const bandColor: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#64748b",
-};
-
-type Incident = {
+export type MapIncident = {
   id: string;
   public_id: string;
   latitude: number;
@@ -19,12 +17,54 @@ type Incident = {
   primary_category: string;
 };
 
+// Mapa base gris claro sin clave (Esri World Light Gray). Encaja con el lienzo de piedra y deja que la
+// coropleta de INEGI y los marcadores sean lo único con color. Sustituible con VITE_TILE_URL / VITE_TILE_ATTRIBUTION.
+const TILE_URL =
+  (import.meta.env.VITE_TILE_URL as string | undefined) ||
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+const TILE_ATTRIBUTION =
+  ((import.meta.env.VITE_TILE_ATTRIBUTION as string | undefined) ||
+    'Mapa base &copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>') +
+  ' · Límites y agua: <a href="https://www.inegi.org.mx/temas/agua/">INEGI</a>';
+
+export const MEXICO_BOUNDS: LatLngBoundsExpression = [
+  [14.4, -118.6],
+  [32.8, -86.6],
+];
+
 type Props = {
-  incidents: Incident[];
+  incidents?: MapIncident[];
+  regions?: RegionFeatureCollection;
+  selectedRegionId?: string | null;
+  onRegionClick?: (id: string, name: string) => void;
+  bounds?: LatLngBoundsExpression | null;
   center?: [number, number];
-  onPick?: (lat: number, lon: number) => void;
+  zoom?: number;
   pickMode?: boolean;
+  /** Punto elegido en modo selección (se dibuja el pin solo si existe). */
+  pin?: [number, number] | null;
+  onPick?: (lat: number, lon: number) => void;
+  className?: string;
+  onConfirm?: (id: string) => void;
 };
+
+function FitBounds({ bounds }: { bounds?: LatLngBoundsExpression | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
+  }, [map, bounds]);
+  return null;
+}
+
+function Recenter({ center, zoom }: { center?: [number, number]; zoom: number }) {
+  const map = useMap();
+  const key = center ? `${center[0].toFixed(5)},${center[1].toFixed(5)}` : "";
+  useEffect(() => {
+    if (center) map.setView(center, Math.max(map.getZoom(), zoom));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, key, zoom]);
+  return null;
+}
 
 function PinPicker({ onPick }: { onPick?: (lat: number, lon: number) => void }) {
   useMapEvents({
@@ -35,29 +75,109 @@ function PinPicker({ onPick }: { onPick?: (lat: number, lon: number) => void }) 
   return null;
 }
 
-export default function IncidentsMap({ incidents, center = [19.4326, -99.1332], onPick, pickMode }: Props) {
-  const icon = (color: string) =>
-    L.divIcon({
-      className: "",
-      html: `<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid white"></div>`,
-    });
+const pinIcon = L.divIcon({
+  className: "",
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  html: '<div style="width:22px;height:22px;border-radius:9999px;background:#3ba6f1;border:3px solid #fff;box-shadow:rgba(0,0,0,.25) 0 2px 6px"></div>',
+});
+
+export default function IncidentsMap({
+  incidents = [],
+  regions,
+  selectedRegionId,
+  onRegionClick,
+  bounds,
+  center,
+  zoom = 14,
+  pickMode,
+  pin,
+  onPick,
+  className = "h-[62vh] min-h-[420px]",
+  onConfirm,
+}: Props) {
+  const regionKey = useMemo(
+    () => (regions ? `${regions.features.length}-${regions.features[0]?.properties.id}-${selectedRegionId}` : "none"),
+    [regions, selectedRegionId],
+  );
+
+  const style = (feature?: Feature<Geometry, { id: string; water: Water }>): PathOptions => {
+    const selected = feature?.properties.id === selectedRegionId;
+    return {
+      fillColor: waterColor(feature?.properties.water?.pct_sin_agua_entubada),
+      fillOpacity: 0.72,
+      color: selected ? "#0c0a09" : "#ffffff",
+      weight: selected ? 2 : 0.8,
+    };
+  };
 
   return (
-    <MapContainer center={center} zoom={13} className="h-[60vh] w-full rounded-lg border" scrollWheelZoom>
-      <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {pickMode && <PinPicker onPick={onPick} />}
+    <MapContainer
+      bounds={center ? undefined : MEXICO_BOUNDS}
+      center={center}
+      zoom={center ? zoom : undefined}
+      className={`w-full overflow-hidden rounded-card border border-line ${className}`}
+      scrollWheelZoom
+    >
+      <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} maxZoom={16} />
+      <Pane name="regions" style={{ zIndex: 350 }} />
+      <FitBounds bounds={bounds} />
+      {regions && (
+        <GeoJSON
+          key={regionKey}
+          pane="regions"
+          data={regions}
+          style={style as L.StyleFunction}
+          onEachFeature={(feature, layer) => {
+            const p = feature.properties as { id: string; name: string; water: Water };
+            layer.bindTooltip(
+              `<strong>${p.name}</strong><br/>Viviendas sin agua entubada: ${fmtPct(p.water?.pct_sin_agua_entubada)}`,
+              { sticky: true, direction: "top", className: "aa-tooltip" },
+            );
+            if (onRegionClick) layer.on("click", () => onRegionClick(p.id, p.name));
+          }}
+        />
+      )}
       {incidents.map((inc) => (
-        <Marker key={inc.id} position={[inc.latitude, inc.longitude]} icon={icon(bandColor[inc.priority_band] || "#0369A1")}>
+        <CircleMarker
+          key={inc.id}
+          center={[inc.latitude, inc.longitude]}
+          radius={BAND_RADIUS[inc.priority_band] ?? 6}
+          pathOptions={{
+            color: inc.priority_band === "critical" ? "#3ba6f1" : "#ffffff",
+            weight: inc.priority_band === "critical" ? 3 : 2,
+            fillColor: "#1c1917",
+            fillOpacity: 0.92,
+          }}
+        >
           <Popup>
-            <div className="text-sm">
-              <p className="font-semibold">{inc.public_id}</p>
-              <p>{inc.primary_category}</p>
-              <p>Reportes: {inc.report_count}</p>
-              <p>Confirmaciones: {inc.confirmation_count}</p>
+            <div className="space-y-1 text-[13px]">
+              <p className="font-mono text-[12px] text-warm">{inc.public_id}</p>
+              <p className="font-medium text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</p>
+              <p className="text-warm">
+                Prioridad {label(BAND_LABELS, inc.priority_band).toLowerCase()} · {inc.report_count} reporte(s) ·{" "}
+                {inc.confirmation_count} confirmación(es)
+              </p>
+              {onConfirm && (
+                <button
+                  type="button"
+                  className="mt-1 rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:border-muted"
+                  onClick={() => onConfirm(inc.id)}
+                >
+                  Yo también la vi
+                </button>
+              )}
             </div>
           </Popup>
-        </Marker>
+        </CircleMarker>
       ))}
+      {pickMode && (
+        <>
+          <PinPicker onPick={onPick} />
+          <Recenter center={center} zoom={zoom} />
+          {pin && <Marker position={pin} icon={pinIcon} />}
+        </>
+      )}
     </MapContainer>
   );
 }

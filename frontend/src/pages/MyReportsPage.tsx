@@ -1,37 +1,54 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../shared/api/client";
+import { CATEGORY_LABELS, REPORT_STATUS_LABELS, label } from "../shared/labels";
+import QueryError from "../shared/ui/QueryError";
+import { ButtonLink, PageHeader, Spinner, Tag } from "../shared/ui";
 
 type Report = {
+  id: string;
   public_id: string;
   title: string;
   status: string;
+  category: string;
   created_at: string;
   incident_id: string | null;
 };
 
-type Paginated<T> = { items: T[] };
-
 export default function MyReportsPage() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["my-reports"],
-    queryFn: () => apiFetch<Paginated<Report>>("/users/me/reports"),
+    queryFn: () => apiFetch<{ items: Report[] }>("/users/me/reports"),
   });
-  if (isLoading) return <p>Cargando…</p>;
-  if (error) return <p className="text-red-600">{(error as Error).message}</p>;
+
   return (
-    <div>
-      <h1 className="mb-4 text-2xl font-semibold">Mis reportes</h1>
-      <ul className="divide-y rounded border bg-white">
-        {(data?.items ?? []).map((r) => (
-          <li key={r.public_id} className="p-4">
-            <p className="font-mono text-primary-700">{r.public_id}</p>
-            <p>{r.title}</p>
-            <p className="text-sm text-slate-600">Estado: {r.status}</p>
-            {r.incident_id && <p className="text-sm">Incidencia vinculada</p>}
-          </li>
-        ))}
-        {!data?.items?.length && <li className="p-4 text-slate-500">Sin reportes aún.</li>}
-      </ul>
+    <div className="space-y-6">
+      <PageHeader
+        title={<>Mis <span className="highlight">reportes</span></>}
+        lead="El estado de cada reporte que has enviado."
+        actions={<ButtonLink to="/reportar" variant="primary">Nuevo reporte</ButtonLink>}
+      />
+      {isLoading && <Spinner />}
+      {error && <QueryError error={error} onRetry={() => void refetch()} />}
+      {data && (
+        <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-card">
+          {data.items.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-4">
+              <span className="font-mono text-[12px] text-warm">{r.public_id}</span>
+              <div className="min-w-[200px] flex-1">
+                <p className="text-ink">{r.title}</p>
+                <p className="text-[12px] text-warm">
+                  {label(CATEGORY_LABELS, r.category)} · {new Date(r.created_at).toLocaleDateString("es-MX", { dateStyle: "medium" })}
+                  {r.incident_id ? " · agrupado en una incidencia" : ""}
+                </p>
+              </div>
+              <Tag tone={r.status === "resolved" ? "accent" : r.status === "rejected" ? "dark" : "neutral"}>
+                {label(REPORT_STATUS_LABELS, r.status)}
+              </Tag>
+            </li>
+          ))}
+          {!data.items.length && <li className="px-5 py-8 text-center text-warm">Aún no has enviado reportes.</li>}
+        </ul>
+      )}
     </div>
   );
 }

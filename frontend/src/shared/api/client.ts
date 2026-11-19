@@ -59,6 +59,19 @@ export function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
+/** Proveedor del token de acceso. Por defecto, el JWT propio; con Firebase, el ID token (se renueva solo). */
+type TokenProvider = () => Promise<string | null>;
+let tokenProvider: TokenProvider = async () => getToken();
+
+export function setTokenProvider(provider: TokenProvider) {
+  tokenProvider = provider;
+}
+
+export async function authHeader(): Promise<Record<string, string>> {
+  const token = await tokenProvider();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function setTokens(tokens: Tokens) {
   localStorage.setItem("access_token", tokens.access_token);
   localStorage.setItem("refresh_token", tokens.refresh_token);
@@ -79,8 +92,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const token = await tokenProvider();
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
 
   const url = `${getApiBase()}${path}`;
   const controller = new AbortController();
