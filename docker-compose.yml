@@ -5,8 +5,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-agua}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agua_secret}
       POSTGRES_DB: ${POSTGRES_DB:-agua_alerta}
-    ports:
-      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,6 +13,19 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agua}:${POSTGRES_PASSWORD:-agua_secret}@db:5432/${POSTGRES_DB:-agua_alerta}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-agua-alerta-mx}
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "alembic upgrade head && python -m scripts.load_inegi_seed"]
+
   api:
     build: ./backend
     env_file:
@@ -22,28 +33,51 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agua}:${POSTGRES_PASSWORD:-agua_secret}@db:5432/${POSTGRES_DB:-agua_alerta}
       PASSWORD_RESET_DEV_EXPOSE_TOKEN: ${PASSWORD_RESET_DEV_EXPOSE_TOKEN:-true}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-agua-alerta-mx}
     ports:
       - "8000:8000"
     volumes:
       - ./data/photos:/data/photos
-      - ./backend:/app
     depends_on:
       db:
         condition: service_healthy
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
 
   web:
     build:
       context: ./frontend
       args:
         VITE_API_BASE_URL: ${DOCKER_WEB_API_BASE_URL:-/api/v1}
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+        VITE_MAP_TILE_ATTRIBUTION: ${VITE_MAP_TILE_ATTRIBUTION:-}
+        VITE_TILE_URL: ${VITE_TILE_URL:-}
+        VITE_TILE_ATTRIBUTION: ${VITE_TILE_ATTRIBUTION:-}
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
     ports:
       - "3080:80"
       - "8081:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:

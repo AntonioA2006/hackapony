@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { BAND_LABELS, CATEGORY_LABELS, fmtPct, label } from "../labels";
 import { useMexicoOutline, type RegionFeatureCollection, type Water } from "../region/api";
+import { mapTileAttribution, mapTileUrl } from "./tileConfig";
 import { BAND_COLORS, BAND_RADIUS, waterColor } from "./waterScale";
 
 export type MapIncident = {
@@ -16,16 +17,6 @@ export type MapIncident = {
   confirmation_count: number;
   primary_category: string;
 };
-
-// Mapa base gris claro sin clave (Esri World Light Gray). Encaja con el lienzo de piedra y deja que la
-// coropleta de INEGI y los marcadores sean lo único con color. Sustituible con VITE_TILE_URL / VITE_TILE_ATTRIBUTION.
-const TILE_URL =
-  (import.meta.env.VITE_TILE_URL as string | undefined) ||
-  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}";
-const TILE_ATTRIBUTION =
-  ((import.meta.env.VITE_TILE_ATTRIBUTION as string | undefined) ||
-    'Mapa base &copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>') +
-  ' · Límites y agua: <a href="https://www.inegi.org.mx/temas/agua/">INEGI</a>';
 
 export const MEXICO_BOUNDS: LatLngBoundsExpression = [
   [14.4, -118.6],
@@ -154,7 +145,7 @@ export default function IncidentsMap({
       maxBoundsViscosity={0.9}
       minZoom={4}
     >
-      <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} maxZoom={16} />
+      <TileLayer attribution={mapTileAttribution()} url={mapTileUrl()} maxZoom={16} />
       <Pane name="mask" style={{ zIndex: 340 }} />
       <Pane name="regions" style={{ zIndex: 350 }} />
       <OutsideMexicoMask />
