@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     jwt_access_ttl_min: int = 15
     jwt_refresh_ttl_days: int = 7
     photos_path: str = "./data/photos"
-    cors_origins: str = "http://localhost:5173,http://localhost:8080"
+    cors_origins: str = "http://localhost:5173,http://localhost:8081"
     grouping_distance_m: float = 75.0
     duplicate_suggest_radius_m: float = 50.0
     priority_pop_ref: int = 5000

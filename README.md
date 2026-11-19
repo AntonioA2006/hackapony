@@ -21,7 +21,8 @@ cd frontend && npm run dev
 ```
 
 - API: http://localhost:8000/docs
-- Web: http://localhost:5173
+- Web (Docker): http://localhost:8081
+- Web (dev): http://localhost:5173
 
 Usuarios de desarrollo sintéticos (ver `seed_dev.py`).
 
