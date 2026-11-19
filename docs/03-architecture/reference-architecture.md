@@ -1,6 +1,7 @@
 # Arquitectura de referencia — Agua Alerta (revisión senior)
 
 > **Propósito:** consolidar la especificación existente en una arquitectura ejecutable, tomar las decisiones que quedaron abiertas y corregir los puntos débiles detectados antes de escribir código.
+> **Estado:** revisado contra el MVP implementado en `main` (commit `43818b0`: API FastAPI, frontend React, Docker). La sección [15](#15-estado-del-código-actual-frente-a-esta-arquitectura) indica, para cada punto, si el código ya lo cumple, lo cumple a medias o lo contradice, con archivo y línea.
 > **Relación con otros documentos:** este documento **no reemplaza** a los canónicos (diccionario de datos, endpoints, algoritmo de urgencia); los **complementa** y, donde hay conflicto, propone el cambio explícitamente en la sección [Hallazgos sobre la especificación actual](#12-hallazgos-sobre-la-especificación-actual) y como ADR nuevo.
 
 ---
@@ -421,3 +422,56 @@ Redactarlas con [adr-template.md](../13-decisions/adr-template.md) al aprobar es
 | Fase 4 | Integración con organismo operador | Módulo `integrations` con webhooks firmados salientes (eventos de incidencia) y API para órdenes de trabajo; ese módulo es el primer candidato real a extraerse como servicio |
 
 Regla para extraer un módulo a servicio: solo cuando tenga **un equipo, un ritmo de despliegue o un perfil de escala distinto** al resto. Ninguno lo tiene hoy.
+
+---
+
+## 15. Estado del código actual frente a esta arquitectura
+
+Revisión de `backend/` y `frontend/` en `main` (`43818b0`). Leyenda: ✅ cumple · 🟡 parcial · ❌ pendiente o contradice.
+
+### 15.1 Hallazgos de §12 confirmados en el código
+
+| ID | Estado | Evidencia | Acción concreta |
+|----|--------|-----------|-----------------|
+| H1 | ❌ | `backend/app/services/grouping.py:18` busca la incidencia cercana sin lock; dos reportes simultáneos crean dos incidencias | `pg_advisory_xact_lock` por celda + `FOR UPDATE` antes de `find_nearby_incident` |
+| H2 | ❌ | `grouping.py:38` `recalc_centroid` mueve el centroide y la búsqueda mide contra él | Columna `anchor_location` (migración 002) y medir el radio contra ella |
+| H3 | ❌ | `app/services/priority.py` solo recalcula en eventos; no hay job periódico ni desglose persistido | Job en worker cada 15 min + columnas `urgency_breakdown`, `urgency_version` |
+| H6 | ❌ | `app/core/rate_limit.py:7` diccionario en memoria por proceso; además `/auth/login` no tiene límite | Contadores en PostgreSQL; limitar login (5/15 min) |
+| H7 | ❌ | `docker-compose.yml:33` ejecuta `alembic upgrade head` en el arranque de `api` | Servicio `migrate` one-off; `api` depende de él con `service_completed_successfully` |
+| H8 | ❌ | `frontend/src/shared/api/client.ts:14` guarda el refresh token en `localStorage`; **no existe endpoint `/auth/refresh`** (los tokens se guardan hasheados pero nunca se usan) y `logout` (`app/api/v1/auth.py:73`) no revoca nada | Implementar refresh con cookie HttpOnly y rotación; logout revoca la familia |
+| H9 | ❌ | `frontend/src/shared/map/IncidentsMap.tsx:47` usa `tile.openstreetmap.org` | URL de tiles por variable de entorno; proveedor en staging/prod |
+| H10 | ❌ | `app/api/v1/reports.py:234` confía en el `content_type` del cliente; no valida magic bytes ni elimina EXIF | Validar con Pillow, re-codificar (descarta EXIF) |
+| H11 | ❌ | `app/api/v1/incidents.py:89` incrementa confirmaciones sin considerar si quien confirma ya reportó | Excluir reportantes; contar usuarios distintos en `r` |
+| H12 | ❌ | `app/services/spatial.py:23` usa `ST_Area(ST_Intersection(...))` para un punto | `ST_Covers` + desempate por `cvegeo` |
+| H13 | ❌ | `POST /reports` sin `Idempotency-Key` | Tabla `idempotency_keys` + dependencia FastAPI |
+| H4 | 🟡 | Se mantienen estados operativos en el reporte | Ver §7.2 al hacer la migración 002 |
+| H5 | ❌ | `alembic/versions/001_initial_schema.py:225` `incident_history` con `ON DELETE CASCADE`: borrar una incidencia borra su auditoría | `ON DELETE RESTRICT` en historial; seudonimización en vez de borrado |
+
+### 15.2 Defectos nuevos encontrados en la implementación
+
+| # | Severidad | Dónde | Problema | Corrección |
+|---|-----------|-------|----------|------------|
+| D1 | Alta | `app/services/grouping.py:101` | El contexto territorial se escribe con un `UPDATE` SQL directo (`spatial.py`), pero luego se lee `report.municipality_id` del objeto ORM, que no se refresca. Muy probablemente la incidencia queda sin municipio ni AGEB y el componente **I** de la urgencia es siempre 0 | Devolver `(census_area_id, municipality_id)` desde `assign_territorial_context` y asignarlos al ORM; agregar test de integración con un AGEB sembrado |
+| D2 | Alta | `grouping.py` (vincular a una incidencia existente) | Al mover el centroide no se reasigna `census_area_id` de la incidencia | Reasignar contexto territorial de la incidencia tras recalcular el centroide |
+| D3 | Media | `app/api/v1/incidents.py:86-89` | Confirmar es "leer y luego insertar": dos clics simultáneos chocan con el UNIQUE → `IntegrityError` → 500 genérico. `confirmation_count += 1` en Python pierde actualizaciones concurrentes | `INSERT … ON CONFLICT DO NOTHING RETURNING`; `UPDATE … SET confirmation_count = confirmation_count + 1` |
+| D4 | Media | `app/main.py:43` | El handler global devuelve 500 **sin registrar la excepción** y con `request_id: null` | `logger.exception(...)` + middleware de `request_id` |
+| D5 | Media | `app/api/v1/incidents.py:55` | El mapa público no filtra por `bbox`, publica el centroide exacto e incluye incidencias sin ningún reporte validado | Endpoint `/public/incidents?bbox=&zoom=` sobre read model con `public_location` (§8) |
+| D6 | Baja | `incidents.py:171`, `:180` | Notifica una vez por reporte: un usuario con 2 reportes recibe 2 avisos; N+1 consultas | Notificar a `DISTINCT user_id` y mover el envío al outbox |
+| D7 | Baja | `grouping.py:38` | `recalc_centroid` hace una consulta por reporte (N+1) | Una sola consulta con `ST_Centroid(ST_Collect(location::geometry))` |
+| D8 | Baja | `docker-compose.yml` | Postgres expuesto en `5432` del host, `--reload` y código montado como volumen: válido para dev, no debe llegar a staging | `compose.override.yml` solo para dev |
+
+### 15.3 Lo que ya está bien encaminado
+
+- ✅ Puntos en `geography(Point,4326)` y AGEB en `geometry(MultiPolygon,4326)` (`models/entities.py`), alineado con §7.1.
+- ✅ `compute_urgency` puro en `app/domain/priority.py` con `now` inyectable y tests en `tests/test_priority.py`.
+- ✅ UNIQUE (`incident_id`, `user_id`) en confirmaciones; refresh tokens almacenados hasheados.
+- ✅ Verificación de propiedad del reporte en servicios para `CIUDADANO` (protección contra IDOR).
+- ✅ Agrupamiento síncrono en la misma transacción que crea el reporte (§5.1), aunque falta el lock.
+
+### 15.4 Orden de trabajo recomendado
+
+1. **D1, D2, D3, H1**: correctitud de datos; sin esto la priorización no es confiable.
+2. **H8, H6, H10, D4**: seguridad y operabilidad mínimas antes de exponerlo a ciudadanos reales.
+3. **H7, D8, H9**: separar configuración de dev y de staging.
+4. **H2, H3, H13, D5**: migración 002 (`anchor_location`, `public_location`, desglose de urgencia, idempotencia) y read model público.
+5. Reorganizar el backend por módulos (§4) de forma incremental, empezando por extraer `territory`.
