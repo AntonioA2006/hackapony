@@ -1,4 +1,5 @@
 import os
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,7 +18,7 @@ def client():
 
 
 def test_register_and_create_report(client):
-    email = "pytest_unique@ejemplo.test"
+    email = f"pytest-{uuid.uuid4().hex[:12]}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
         json={

@@ -85,7 +85,7 @@ def create_report(
     )
     db.add(report)
     db.flush()
-    process_report_grouping(db, report, user.id)
+    process_report_grouping(db, report, payload.latitude, payload.longitude, user.id)
     notify_user(
         db,
         user.id,
