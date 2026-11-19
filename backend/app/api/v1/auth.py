@@ -105,7 +105,7 @@ def password_reset_request(payload: PasswordResetRequest, request: Request, db: 
         db.add(PasswordResetToken(user_id=user.id, token_hash=token_hash, expires_at=expires))
         db.commit()
         logger.info("password_reset_token_created user_id=%s", user.id)
-        if settings.password_reset_dev_expose_token:
+        if get_settings().password_reset_dev_expose_token:
             dev_token = raw
     return PasswordResetAccepted(message=GENERIC_RESET_MSG, dev_reset_token=dev_token)
 
