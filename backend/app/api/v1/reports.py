@@ -17,6 +17,7 @@ from app.models.entities import IncidentHistory, Report, ReportPhoto
 from app.schemas.common import PaginatedResponse
 from app.schemas.reports import HistoryItem, ReportCreate, ReportCreateResponse, ReportOut, ReportPatch, ReportPhotoOut
 from app.services.grouping import nearby_public_suggestions, process_report_grouping
+from app.services.photo_sanitize import sanitize_photo
 from app.services.notifications import notify_user
 from app.services.spatial import point_wkt
 from app.utils.ids import new_public_id
@@ -231,9 +232,9 @@ async def upload_photo(
     content = await file.read()
     if len(content) > settings.max_photo_bytes:
         raise HTTPException(413, detail="Archivo demasiado grande")
-    mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
-    if mime not in settings.allowed_mime_set:
-        raise HTTPException(415, detail="MIME no permitido")
+    content, mime = sanitize_photo(content, settings.allowed_mime_set)
+    if len(content) > settings.max_photo_bytes:
+        raise HTTPException(413, detail="Archivo demasiado grande tras procesar")
     storage_key = f"{report.id}/{uuid.uuid4()}{mimetypes.guess_extension(mime) or '.bin'}"
     dest = Path(settings.photos_path) / storage_key
     dest.parent.mkdir(parents=True, exist_ok=True)

@@ -11,11 +11,14 @@ from sqlalchemy.orm import Session
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.middleware.request_id import RequestIdMiddleware
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Agua Alerta API", version="0.1.0")
+app.add_middleware(RequestIdMiddleware)
 _cors_kw: dict = {
     "allow_credentials": True,
     "allow_methods": ["*"],
@@ -49,6 +52,8 @@ def health_ready(db: Session = Depends(get_db)):
 
 @app.exception_handler(Exception)
 async def unhandled(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", None)
+    logger.exception("unhandled_error request_id=%s", request_id)
     return JSONResponse(
         status_code=500,
         content={
@@ -56,7 +61,7 @@ async def unhandled(request: Request, exc: Exception):
                 "code": "INTERNAL_ERROR",
                 "message": "Error interno",
                 "details": [],
-                "request_id": None,
+                "request_id": request_id,
             }
         },
     )
