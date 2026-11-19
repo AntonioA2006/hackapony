@@ -83,7 +83,8 @@ def test_operator_validates_and_dispatches_crew_closes(client):
     rep = _report(client, cit, contact_phone="443 128 4902")
     iid = rep["incident_id"]
 
-    # La cuadrilla no ve órdenes que no son suyas
+    # La cuadrilla no usa el mapa de despacho ni ve órdenes que no son suyas
+    assert client.get("/api/v1/incidents/map", headers=crew, params={"bbox": "-102,19,-98,21"}).status_code == 403
     assert client.get(f"/api/v1/incidents/{iid}/detail", headers=crew).status_code == 404
     assert iid not in [i["id"] for i in client.get("/api/v1/incidents?status=active", headers=crew).json()["items"]]
 

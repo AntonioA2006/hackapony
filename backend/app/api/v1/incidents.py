@@ -163,10 +163,11 @@ def staff_map_incidents(
     page: int = 1,
     page_size: int = PUBLIC_PAGE_SIZE_DEFAULT,
     bbox: str | None = Query(None, max_length=200, description="minLon,minLat,maxLon,maxLat"),
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
-    """Personal: todas las incidencias abiertas del viewport, también las sin validar, en el punto real."""
+    """Despacho: todas las incidencias abiertas del viewport, también las sin validar, en el punto real.
+    La cuadrilla no lo usa: solo ve sus órdenes asignadas (/incidents?assigned=me)."""
     page, page_size = clamp_public_page(page, page_size)
     box = None
     if bbox:
