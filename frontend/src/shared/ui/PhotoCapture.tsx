@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type Props = {
   id: string;
@@ -16,6 +17,19 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
   const streamRef = useRef<MediaStream | null>(null);
   const previews = useMemo(() => files.map((file) => ({ name: file.name, url: URL.createObjectURL(file) })), [files]);
   useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), [previews]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!open || !video || !stream) return;
+    video.srcObject = stream;
+    const play = () => {
+      void video.play();
+    };
+    video.addEventListener("loadedmetadata", play);
+    play();
+    return () => video.removeEventListener("loadedmetadata", play);
+  }, [open]);
 
   const stop = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -36,12 +50,6 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
       });
       streamRef.current = stream;
       setOpen(true);
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      });
     } catch {
       setError("No se permitió la cámara. Actívala en los permisos del navegador o elige una foto.");
     }
@@ -117,22 +125,30 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
         </div>
       )}
       {error && <p className="mt-2 text-[13px] text-critical">{error}</p>}
-      {open && (
-        <div className="fixed inset-0 z-[1400] flex items-end justify-center bg-ink/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Cámara">
-          <div className="w-full max-w-lg overflow-hidden rounded-feature bg-card p-3 shadow-float">
-            <video ref={videoRef} className="aspect-[3/4] w-full rounded-card bg-soot object-cover sm:aspect-video" playsInline muted />
-            <div className="mt-3 flex gap-2">
-              <button type="button" className="press min-h-11 flex-1 rounded-full bg-cyan text-white" onClick={snap}>
-                <i className="fa-solid fa-camera mr-2" aria-hidden />
-                Usar esta foto
-              </button>
-              <button type="button" className="press min-h-11 rounded-full border border-line px-4" onClick={stop}>
-                Cancelar
-              </button>
+      {open &&
+        createPortal(
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-ink/60 p-4" role="dialog" aria-modal="true" aria-label="Cámara">
+            <div className="w-full max-w-lg overflow-hidden rounded-feature bg-card p-3 shadow-float">
+              <video
+                ref={videoRef}
+                className="mx-auto aspect-[3/4] w-full max-h-[70vh] rounded-card bg-soot object-cover object-center sm:aspect-video"
+                playsInline
+                muted
+                autoPlay
+              />
+              <div className="mt-3 flex gap-2">
+                <button type="button" className="press min-h-11 flex-1 rounded-full bg-cyan text-white" onClick={snap}>
+                  <i className="fa-solid fa-camera mr-2" aria-hidden />
+                  Usar esta foto
+                </button>
+                <button type="button" className="press min-h-11 rounded-full border border-line px-4" onClick={stop}>
+                  Cancelar
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
