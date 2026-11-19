@@ -1,43 +1,61 @@
-# Agua Alerta (hackapony)
+# Agua Alerta
 
-MVP según `docs/`.
+Plataforma para reportar fugas de agua, seguir el folio y cerrar el caso con evidencia.
 
-## Requisitos
+Quien reporta ve el estado. Un operador valida. Una cuadrilla repara y explica. El operador confirma y las fotos se borran.
 
-- **Docker Desktop en ejecución** (motor Linux) para PostGIS
-- Python 3.12+
-- Node 20+
+![Inicio de Agua Alerta](docs/readme/inicio.png)
 
-## Arranque rápido
+## Cómo se ve
+
+| Inicio | Sobre nosotros | Aviso legal | Teléfono |
+| --- | --- | --- | --- |
+| Mapa, indicadores y el acceso al reporte | Misión, visión y valores | Términos y privacidad, en su propia página | Menú en el celular |
+
+![Sobre nosotros](docs/readme/nosotros.png)
+
+![Aviso legal](docs/readme/legal.png)
+
+![Vista en el celular](docs/readme/movil.png)
+
+## Quién entra y qué hace
+
+| Rol | Para qué entra |
+| --- | --- |
+| Ciudadano | Reporta donde está, sigue su folio y contesta la encuesta cuando el caso queda resuelto |
+| Operador | Valida reportes, asigna a la cuadrilla y confirma el cierre |
+| Cuadrilla | Atiende la orden, sube la foto de la reparación, la explicación y el tiempo |
+| Supervisión | Cambia de vista (ciudadano, operador o cuadrilla) y administra el equipo |
+
+En el celular, el menú de hamburguesa cambia con el rol:
+
+- **Ciudadano:** Tablero, Estadísticas, Sobre nosotros, Sesión y Cerrar sesión.
+- **Operador:** Sobre nosotros, Cambiar de sesión y Cerrar sesión. El panel sigue en la barra.
+- **Cuadrilla:** Inicio, Sobre nosotros, Cuenta y Cerrar sesión. Las órdenes siguen en la barra.
+
+## Arranque
+
+Hace falta Docker con PostGIS, Python 3.12+ y Node 20+.
 
 ```bash
-# Abre Docker Desktop y espera a que el motor esté "running"
-cp .env.example .env   # Windows: copy .env.example .env
+cp .env.example .env
 docker compose up -d --build
 docker compose exec api python -m scripts.seed_dev
 ```
 
-Compose espera a que Postgres esté sano, corre el servicio **migrate** (`alembic upgrade head` y `python -m scripts.load_inegi_seed`) y solo entonces arranca la API. La API no migra al iniciar.
+- Equipo en la red: `http://<tu-IP>:3080`
+- Esta máquina: `http://localhost:3080`
+- API: `http://localhost:8000/docs`
 
-- **Web equipo (nginx, LAN):** http://\<tu-IP\>:3080 — un solo puerto; API bajo `/api/v1`, docs en `/docs`
-- Web (Docker local): http://localhost:3080 o http://localhost:8081
-- API directa: http://localhost:8000/docs
-
-Esa imagen web entra con Firebase Auth (`frontend/.env.production`). `FIREBASE_PROJECT_ID` en `.env` tiene que ser el mismo proyecto (`agua-alerta-mx` en el ejemplo) para que la API acepte el ID token.
-
-`docker compose up` fusiona `compose.override.yml`: recarga de la API, el código de `backend/` montado en `api` y `migrate`, y Postgres en `127.0.0.1:5432`. El nginx de la demo sigue en **:3080**.
-
-Para el mismo stack sin ese modo de desarrollo:
+Sin el modo de desarrollo del override:
 
 ```bash
 docker compose -f docker-compose.yml up -d --build
 ```
 
-Si añades una revisión de Alembic o regeneras el paquete INEGI y `migrate` ya terminó bien: `docker compose run --rm migrate`.
+Si cambias una migración: `docker compose run --rm migrate`.
 
-### Desarrollo en el anfitrión
-
-Con Postgres publicado por el override (`docker compose up -d db`):
+### En la máquina, sin el contenedor de la web
 
 ```bash
 cd backend && alembic upgrade head && python -m scripts.load_inegi_seed
@@ -46,43 +64,23 @@ cd backend && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev
 ```
 
-- Web (dev Vite): http://localhost:5173 — `VITE_API_BASE_URL=http://localhost:8000/api/v1` en `frontend/.env.local`. Sin `VITE_FIREBASE_*`, este modo usa el login de la API.
+La web de desarrollo queda en `http://localhost:5173`. En `frontend/.env.local`, `VITE_API_BASE_URL=http://localhost:8000/api/v1`. Sin claves de Firebase, el login es el de la API.
 
-### Tiles del mapa
+Usuarios de demostración que crea el seed: `ciudadano@example.com` / `Ciudadano123!`, `admin@example.com` / `Admin12345!`, `super@example.com` / `Super12345!`.
 
-Sin variables, el mapa nacional usa Esri World Light Gray. Para otro proveedor define, antes de construir la imagen `web`:
+## Mapa
+
+Sin variables, el mapa usa Esri World Light Gray. Otro proveedor:
 
 ```bash
 VITE_MAP_TILE_URL=https://tiles.ejemplo/{z}/{x}/{y}.png
 VITE_MAP_TILE_ATTRIBUTION=© Ejemplo
 ```
 
-Van en el `.env` de la raíz (Docker) o en `frontend/.env.local` (`npm run dev`). También se aceptan `VITE_TILE_URL` y `VITE_TILE_ATTRIBUTION` si `VITE_MAP_TILE_*` no está definida. Un cambio exige `docker compose up -d --build web` o reiniciar Vite.
+El mapa público solo muestra incidencias con un reporte ya validado, y la coordenada está aproximada. El personal ve el punto real, también lo que aún no se valida.
 
-La imagen nginx toma Firebase de `frontend/.env.production`. Para sustituir esas claves públicas en el build, define `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID` y `VITE_FIREBASE_APP_ID` en el `.env` de la raíz. Si no están, se conserva el archivo de producción. `npm run dev` sin esas variables sigue usando el login de la API.
+## Más documentación
 
-Documentación detallada: [docs/11-infrastructure/local-network-setup.md](docs/11-infrastructure/local-network-setup.md).
-
-### Pruebas en equipo (Windows)
-
-Con Docker Desktop en marcha:
-
-```powershell
-.\scripts\team-up.ps1
-```
-
-Comparte la URL `http://10.x.x.x:3080` que imprime el script (misma red Wi‑Fi). Si el firewall bloquea, permite entrante TCP **3080**.
-
-Usuarios de demo: `ciudadano@example.com` / `Ciudadano123!`, `admin@example.com` / `Admin12345!`, `super@example.com` / `Super12345!` (`team-up.ps1` ejecuta el seed; incluye incidencia **AA-LANDEM1** en el mapa).
-
-Verificación rápida: `.\scripts\verify-lan.ps1`. Firewall (admin): `.\scripts\firewall-lan.ps1`.
-
-**Mapa público:** solo incidencias con al menos un reporte **validado** por admin.
-
-## Pruebas
-
-```bash
-cd backend && pytest tests/test_priority.py -q
-```
-
-INEGI E2E (wscatgeo en vivo): `.\scripts\inegi-e2e.ps1` — ver [docs/10-testing/inegi-e2e.md](docs/10-testing/inegi-e2e.md).
+- [Puesta en marcha en red local](docs/11-infrastructure/local-network-setup.md)
+- [Despliegue](docs/11-infrastructure/free-deployment.md)
+- Pruebas de prioridad: `cd backend && pytest tests/test_priority.py -q`

@@ -4,6 +4,7 @@ import { apiFetch } from "../shared/api/client";
 import { CATEGORY_LABELS, FLOW_LABELS, label } from "../shared/labels";
 import QueryError from "../shared/ui/QueryError";
 import { ButtonLink, PageHeader, Skeleton, StatusTag } from "../shared/ui";
+import SatisfactionSurvey from "../shared/ui/SatisfactionSurvey";
 
 type Report = {
   id: string;
@@ -63,7 +64,7 @@ export default function MyReportsPage() {
     <div className="space-y-6">
       <PageHeader
         title={<>Mis <span className="highlight">reportes</span></>}
-        lead="El estado de cada reporte. Toca uno para verlo en su ubicación exacta en el mapa."
+        lead="El estado de cada reporte. Si ya está resuelto, puedes contestar la encuesta de satisfacción."
         actions={<ButtonLink to="/reportar" variant="primary">Nuevo reporte</ButtonLink>}
       />
       {isLoading && [0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}
@@ -94,21 +95,8 @@ export default function MyReportsPage() {
                   <Progress status={r.status} />
                 </div>
               </Link>
-              {r.incident_id && (
-                <p className="mt-2 flex flex-wrap items-center gap-1 px-1 text-[12px] text-warm">
-                  Satisfacción
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      className="min-h-11 min-w-8 rounded-full border border-line bg-card px-2 text-ink hover:border-muted"
-                      onClick={() => rate.mutate({ id: r.incident_id!, score: n })}
-                      aria-label={`Calificar ${r.public_id} con ${n} de 5`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </p>
+              {r.incident_id && r.status === "resolved" && (
+                <SatisfactionSurvey pending={rate.isPending} onSubmit={(score) => rate.mutate({ id: r.incident_id!, score })} />
               )}
             </li>
           ))}
