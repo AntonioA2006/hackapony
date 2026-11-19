@@ -76,59 +76,82 @@ def test_public_map_hides_unvalidated_from_citizens(client):
     assert mine["latitude"] == pytest.approx(lat, abs=1e-5)
 
 
-def test_technician_flow_take_attend_resolve_but_not_dismiss(client):
+def test_operator_validates_and_dispatches_crew_closes(client):
+    """Flujo completo: ciudadano → operador valida y envía a cuadrilla → cuadrilla atiende y cierra."""
     _, cit = _user(UserRole.CIUDADANO)
-    tech_id, tech = _user(UserRole.TECNICO)
-    other_id, other = _user(UserRole.TECNICO)
-    iid = _report(client, cit)["incident_id"]
+    _, op = _user(UserRole.OPERADOR)
+    crew_id, crew = _user(UserRole.CUADRILLA)
+    _, other_crew = _user(UserRole.CUADRILLA)
+    rep = _report(client, cit, contact_phone="443 128 4902")
+    iid = rep["incident_id"]
 
-    res = client.patch(f"/api/v1/incidents/{iid}", headers=tech, json={"status": "in_progress"})
+    # La cuadrilla no usa el mapa de despacho ni ve órdenes que no son suyas
+    assert client.get("/api/v1/incidents/map", headers=crew, params={"bbox": "-102,19,-98,21"}).status_code == 403
+    assert client.get(f"/api/v1/incidents/{iid}/detail", headers=crew).status_code == 404
+    assert iid not in [i["id"] for i in client.get("/api/v1/incidents?status=active", headers=crew).json()["items"]]
+
+    # El operador no puede cerrar la atención; sí validar y despachar
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"status": "resolved"}).status_code == 403
+    res = client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"assigned_to_id": crew_id, "validate_reports": True})
     assert res.status_code == 200, res.text
-    assert res.json()["assigned_to"]["id"] == tech_id  # al atenderla, la toma
-
-    assert client.patch(f"/api/v1/incidents/{iid}", headers=other, json={"status": "resolved"}).status_code == 403
-    assert client.patch(f"/api/v1/incidents/{iid}", headers=other, json={"assign_to_me": True}).status_code == 409
-    assert client.patch(f"/api/v1/incidents/{iid}", headers=tech, json={"status": "dismissed"}).status_code == 403
-
-    res = client.patch(f"/api/v1/incidents/{iid}", headers=tech, json={"status": "resolved"})
-    assert res.status_code == 200
     body = res.json()
-    assert body["closed_at"] is not None
-    assert body["estimated_liters"] is not None  # chorro × horas abierta
+    assert body["status"] == "in_progress" and body["assigned_to"]["id"] == crew_id and body["validated"] is True
+    # Solo a cuadrillas: no a otra persona operadora
+    op2_id, _ = _user(UserRole.OPERADOR)
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"assigned_to_id": op2_id}).status_code == 422
+
+    # La cuadrilla asignada ve su orden con el teléfono para llamar
+    detail = client.get(f"/api/v1/incidents/{iid}/detail", headers=crew).json()
+    assert detail["reports"][0]["contact_phone"] == "4431284902"
+    mine = client.get("/api/v1/incidents?status=active", headers=crew).json()["items"]
+    assert [i["id"] for i in mine] == [iid]
+    # Otra cuadrilla no puede tocarla; la cuadrilla no puede descartar ni reasignar
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=other_crew, json={"status": "resolved"}).status_code == 404
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=crew, json={"status": "dismissed"}).status_code == 403
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=crew, json={"assigned_to_id": crew_id}).status_code == 403
+
+    # Ciudadano: etapa 2 (validado / en atención) mientras la cuadrilla trabaja
+    active = client.get("/api/v1/users/me/active-report", headers=cit).json()["active"]
+    assert active["stage"] == 2 and active["dispatched"] is True
+
+    res = client.patch(f"/api/v1/incidents/{iid}", headers=crew, json={"status": "resolved"})
+    assert res.status_code == 200 and res.json()["closed_at"] is not None
     # Reabrir es solo de supervisión
-    assert client.patch(f"/api/v1/incidents/{iid}", headers=tech, json={"status": "in_progress"}).status_code == 403
-    # El ciudadano ve su reporte resuelto
+    assert client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"status": "in_progress"}).status_code == 403
+    # El ticket ciudadano se liberó y puede reportar de nuevo
+    assert client.get("/api/v1/users/me/active-report", headers=cit).json()["active"] is None
     mine = client.get("/api/v1/users/me/reports", headers=cit).json()["items"]
-    assert any(r["status"] == "resolved" and r["incident_status"] == "resolved" for r in mine)
+    assert mine[0]["status"] == "resolved" and mine[0]["incident_status"] == "resolved"
+    _report(client, cit)
 
 
-def test_supervisor_promotes_technician_by_id_and_assigns(client):
-    sup_id, sup = _user(UserRole.SUPERADMINISTRADOR)
-    cand_id, cand = _user(UserRole.CIUDADANO)
+def test_one_active_ticket_per_citizen(client):
     _, cit = _user(UserRole.CIUDADANO)
+    first = _report(client, cit)
+    res = client.post(
+        "/api/v1/reports",
+        headers=cit,
+        json={"title": "Otra fuga", "description": "Descripción suficientemente larga", "category": "broken_pipe",
+              "latitude": 19.5, "longitude": -100.0},
+    )
+    assert res.status_code == 409 and first["public_id"] in res.json()["detail"]
+    assert client.get("/api/v1/users/me/active-report", headers=cit).json()["active"]["public_id"] == first["public_id"]
 
-    found = client.get(f"/api/v1/users?q={cand_id}", headers=sup).json()["items"]
-    assert [u["id"] for u in found] == [cand_id]
 
-    res = client.patch(f"/api/v1/users/{cand_id}/role", headers=sup, json={"role": "TECNICO"})
-    assert res.status_code == 200 and res.json()["role"] == "TECNICO"
-    assert client.patch(f"/api/v1/users/{sup_id}/role", headers=sup, json={"role": "CIUDADANO"}).status_code == 409
-    assert client.patch(f"/api/v1/users/{cand_id}/role", headers=sup, json={"role": "SUPERADMINISTRADOR"}).status_code == 422
-    assert client.patch(f"/api/v1/users/{cand_id}/role", headers=cand, json={"role": "TECNICO"}).status_code == 403
-
-    iid = _report(client, cit)["incident_id"]
-    res = client.patch(f"/api/v1/incidents/{iid}", headers=sup, json={"assigned_to_id": cand_id})
-    assert res.status_code == 200 and res.json()["assigned_to"]["id"] == cand_id
-    # El nuevo técnico ve la incidencia en "mis casos"
-    mine = client.get("/api/v1/incidents?assigned=me&status=active", headers=cand).json()["items"]
-    assert iid in [i["id"] for i in mine]
-    # Asignar a un ciudadano no se permite
-    assert client.patch(f"/api/v1/incidents/{iid}", headers=sup, json={"assigned_to_id": str(uuid.uuid4())}).status_code == 422
+def test_invalid_contact_phone_rejected(client):
+    _, cit = _user(UserRole.CIUDADANO)
+    res = client.post(
+        "/api/v1/reports",
+        headers=cit,
+        json={"title": "Fuga tel", "description": "Descripción suficientemente larga", "category": "broken_pipe",
+              "latitude": 19.5, "longitude": -100.0, "contact_phone": "123"},
+    )
+    assert res.status_code == 422
 
 
 def test_staff_dashboard_and_region_colors(client):
     _, cit = _user(UserRole.CIUDADANO)
-    _, tech = _user(UserRole.TECNICO)
+    _, tech = _user(UserRole.OPERADOR)
     _report(client, cit, leak_flow="inundacion", severity="critical")
     data = client.get("/api/v1/statistics/staff-dashboard?days=30", headers=tech).json()
     t = data["totals"]
@@ -150,7 +173,7 @@ def test_staff_detail_includes_report_photos(client, tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings(), "photos_path", str(tmp_path))
     try:
         _, cit = _user(UserRole.CIUDADANO)
-        _, tech = _user(UserRole.TECNICO)
+        _, tech = _user(UserRole.OPERADOR)
         rep = _report(client, cit)
         buf = io.BytesIO()
         Image.new("RGB", (20, 20), (1, 2, 3)).save(buf, "JPEG")

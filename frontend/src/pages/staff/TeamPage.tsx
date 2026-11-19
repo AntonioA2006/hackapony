@@ -39,13 +39,13 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title={<>Equipo <span className="highlight">técnico</span></>} lead="Nombra técnicos con el ID que cada persona ve en su perfil, y revisa la carga de trabajo." />
+      <PageHeader title={<>Equipo de <span className="highlight">operación</span></>} lead="Asigna a cada persona el rol de operador (despacho) o cuadrilla (campo) con el ID que ve en su perfil." />
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
 
       <Card>
-        <h2 className="text-subheading">Nombrar técnico</h2>
+        <h2 className="text-subheading">Asignar rol</h2>
         <p className="mt-1 text-body text-warm">
-          Pide a la persona que cree su cuenta y te comparta su <strong className="font-medium text-ink">ID</strong> (Perfil → “Mi ID”). También puedes buscar por correo o nombre.
+          Pide a la persona que cree su cuenta y te comparta su <strong className="font-medium text-ink">ID</strong> (Perfil → “Mi ID”). También puedes buscar por correo o nombre. Después entra con “Entrar como operador” o “Entrar como cuadrilla”.
         </p>
         <form onSubmit={onSearch} className="mt-4 flex flex-wrap gap-2">
           <input className="field min-w-[260px] flex-1 font-mono" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ID (UUID), correo o nombre" aria-label="Buscar persona" />
@@ -65,15 +65,26 @@ export default function TeamPage() {
                   </p>
                 </div>
                 <Tag tone={u.role === "CIUDADANO" ? "neutral" : "accent"}>{ROLE_LABELS[u.role]}</Tag>
-                {u.role === "CIUDADANO" && (
-                  <Button variant="primary" onClick={() => setRole.mutate({ id: u.id, role: "TECNICO" })}>
-                    Nombrar técnico
-                  </Button>
-                )}
-                {(u.role === "TECNICO" || u.role === "ADMINISTRADOR") && (
-                  <Button onClick={() => window.confirm(`¿Quitar el rol de técnico a ${u.display_name}? Sus casos abiertos volverán a la cola.`) && setRole.mutate({ id: u.id, role: "CIUDADANO" })}>
-                    Quitar rol
-                  </Button>
+                {u.role !== "SUPERADMINISTRADOR" && (
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Rol de ${u.display_name}`}>
+                    {(
+                      [
+                        ["OPERADOR", "Operador"],
+                        ["CUADRILLA", "Cuadrilla"],
+                        ["CIUDADANO", "Ciudadano"],
+                      ] as const
+                    ).map(([role, l]) => (
+                      <Button
+                        key={role}
+                        variant={u.role === role ? "dark" : "ghost"}
+                        className="!px-3 !py-1 text-[12px]"
+                        disabled={u.role === role || setRole.isPending}
+                        onClick={() => setRole.mutate({ id: u.id, role })}
+                      >
+                        {l}
+                      </Button>
+                    ))}
+                  </div>
                 )}
               </li>
             ))}
@@ -83,18 +94,18 @@ export default function TeamPage() {
       </Card>
 
       <section>
-        <h2 className="mb-3 text-subheading">Personal activo</h2>
+        <h2 className="mb-3 text-subheading">Personal activo (despacho y cuadrillas)</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {techs.data?.map((t) => (
             <div key={t.id} className="lift rounded-card border border-line bg-card p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-medium text-ink">{t.display_name}</p>
-                <Tag tone={t.role === "SUPERADMINISTRADOR" ? "dark" : "accent"}>{ROLE_LABELS[t.role]}</Tag>
+                <Tag tone={t.role === "SUPERADMINISTRADOR" ? "dark" : t.role === "CUADRILLA" ? "neutral" : "accent"}>{ROLE_LABELS[t.role]}</Tag>
               </div>
               <p className="mt-1 truncate text-[12px] text-warm">{t.email}</p>
               <dl className="mt-3 grid grid-cols-2 gap-2 text-[13px]">
                 <div className="rounded-input bg-canvas p-2">
-                  <dt className="text-[11px] text-warm">Abiertos</dt>
+                  <dt className="text-[11px] text-warm">En curso</dt>
                   <dd className="tabular-nums text-ink">{t.open_assigned}</dd>
                 </div>
                 <div className="rounded-input bg-canvas p-2">

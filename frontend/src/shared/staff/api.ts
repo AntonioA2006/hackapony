@@ -66,6 +66,7 @@ export type DetailReport = {
   lat: number;
   lon: number;
   reporter: string;
+  contact_phone: string | null;
   photos: { id: string; mime_type: string; size_bytes: number }[];
 };
 

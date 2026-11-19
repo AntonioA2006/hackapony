@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus, UserRole
+from app.domain.enums import OPERATOR_ROLES, SUPERVISOR_ROLES, IncidentStatus, ReportStatus, UserRole
 from app.models.entities import CitizenConfirmation, Incident, IncidentRating, Report
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
@@ -43,7 +43,7 @@ def public_overview(db: Session = Depends(get_db)):
 
 @router.get("/summary")
 def summary(
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     open_incidents = db.scalar(
@@ -93,7 +93,7 @@ def citizen_dashboard(user=Depends(get_current_user), db: Session = Depends(get_
 
 @router.get("/incidents-by-municipality")
 def by_municipality(
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     rows = db.execute(
@@ -112,7 +112,7 @@ def by_municipality(
 
 @router.get("/geographic-distribution")
 def geo_distribution(
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     rows = db.execute(
@@ -154,7 +154,7 @@ def _scope(cve_ent: str | None) -> tuple[str, dict]:
 def staff_dashboard(
     cve_ent: str | None = Query(None, pattern=r"^\d{1,2}$"),
     days: int = Query(30, ge=7, le=365),
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     """Métricas para técnico y supervisión. El desperdicio usa caudales de referencia (app.domain.waste)."""
@@ -245,7 +245,7 @@ def staff_dashboard(
 @router.get("/incidents-by-region")
 def incidents_by_region(
     cve_ent: str | None = Query(None, pattern=r"^\d{1,2}$"),
-    user=Depends(require_roles(*STAFF_ROLES)),
+    user=Depends(require_roles(*OPERATOR_ROLES)),
     db: Session = Depends(get_db),
 ):
     """Incidencias activas por región para colorear el mapa del personal (estados o municipios de un estado).

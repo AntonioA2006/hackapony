@@ -112,3 +112,15 @@ export function parseCoordinate(raw: string, kind: "lat" | "lon"): number | null
   const [min, max] = kind === "lat" ? [14, 33.5] : [-118.5, -86.5];
   return v >= min && v <= max ? v : null;
 }
+
+/** Distancia geodésica (Haversine) en metros. */
+export function haversineMeters(a: [number, number], b: [number, number]): number {
+  const R = 6371008.8;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b[0] - a[0]);
+  const dLon = rad(b[1] - a[1]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+export const fmtDistance = (m: number) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toLocaleString("es-MX", { maximumFractionDigits: 1 })} km`);

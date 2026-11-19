@@ -20,6 +20,7 @@ const EVENT_LABELS: Record<string, string> = {
   photos_purged: "Fotos eliminadas al cerrar",
   severity_changed: "Gravedad ajustada",
   flow_changed: "Tipo de fuga ajustado",
+  reports_validated: "Reportes validados por despacho",
 };
 
 export default function IncidentDetailPage() {
@@ -29,7 +30,8 @@ export default function IncidentDetailPage() {
   const qc = useQueryClient();
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const detail = useQuery({ queryKey: ["incident-detail", id], queryFn: () => apiFetch<IncidentDetail>(`/incidents/${id}/detail`) });
-  const techs = useTechnicians(supervisor);
+  const techs = useTechnicians(true);
+  const [dispatchTo, setDispatchTo] = useState("");
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["incident-detail", id] });
@@ -43,7 +45,12 @@ export default function IncidentDetailPage() {
       const st = body.status as string | undefined;
       setMsg({
         tone: "success",
-        text: st === "resolved" || st === "dismissed" ? "Caso cerrado: se avisó a quien reportó y se eliminaron las fotos." : "Incidencia actualizada.",
+        text:
+          st === "resolved" || st === "dismissed"
+            ? "Caso cerrado: se avisó a quien reportó y se eliminaron las fotos."
+            : body.assigned_to_id
+              ? "Validada y enviada a la cuadrilla: ya ve la ubicación exacta y los detalles."
+              : "Incidencia actualizada.",
       });
       refresh();
     },
@@ -63,8 +70,7 @@ export default function IncidentDetailPage() {
   if (detail.error) return <QueryError error={detail.error} onRetry={() => void detail.refetch()} />;
   const { incident: inc, reports, history, photos_purged_at } = detail.data!;
   const closed = inc.status === "resolved" || inc.status === "dismissed";
-  const mine = inc.assigned_to?.id === user?.id;
-  const canAct = supervisor || !inc.assigned_to || mine;
+  const crews = (techs.data ?? []).filter((t) => t.role === "CUADRILLA");
 
   const close = (status: "resolved" | "dismissed") => {
     if (window.confirm(`¿${status === "resolved" ? "Resolver" : "Descartar"} ${inc.public_id}? Se avisará a quien reportó y las fotos se eliminarán de forma permanente.`)) {
@@ -92,24 +98,46 @@ export default function IncidentDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!closed && !inc.assigned_to && <Button onClick={() => patch.mutate({ assign_to_me: true })}>Tomar caso</Button>}
-          {!closed && mine && !supervisor && <Button variant="quiet" onClick={() => patch.mutate({ unassign: true })}>Liberar</Button>}
-          {!closed && canAct && inc.status !== "in_progress" && (
-            <Button variant="dark" onClick={() => patch.mutate({ status: "in_progress" })}>
-              Poner en atención
+          {!closed && <Button onClick={() => close("dismissed")}>Descartar</Button>}
+          {!closed && supervisor && (
+            <Button variant="dark" onClick={() => close("resolved")}>
+              Cerrar como atendida
             </Button>
           )}
-          {!closed && canAct && (
-            <Button variant="primary" onClick={() => close("resolved")}>
-              Marcar resuelta
-            </Button>
-          )}
-          {!closed && supervisor && <Button onClick={() => close("dismissed")}>Descartar</Button>}
           {closed && supervisor && <Button onClick={() => patch.mutate({ status: "open" })}>Reabrir</Button>}
         </div>
       </header>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-      {!canAct && <Notice>Este caso lo atiende {inc.assigned_to?.display_name}. Solo esa persona o supervisión pueden cambiar su estado.</Notice>}
+      {!closed && (
+        <section className="anim-pop rounded-card border border-cyan/30 bg-sky/30 p-5">
+          <h2 className="text-subheading">{inc.assigned_to ? "En atención por cuadrilla" : "Validar y enviar a cuadrilla"}</h2>
+          <p className="mt-1 text-body text-warm">
+            {inc.assigned_to
+              ? `Asignada a ${inc.assigned_to.display_name}. La cuadrilla ve la ubicación exacta, las fotos y el teléfono de contacto, y la marca como atendida al terminar.`
+              : "Revisa los reportes y las fotos. Al enviar, los reportes pendientes quedan validados y la cuadrilla recibe la ubicación y los detalles."}
+          </p>
+          <div className="mt-4 flex flex-wrap items-end gap-2">
+            <label className="min-w-[240px] flex-1">
+              <span className="label">Cuadrilla</span>
+              <select className="field" value={dispatchTo} onChange={(e) => setDispatchTo(e.target.value)}>
+                <option value="">{crews.length ? "Elige una cuadrilla" : "No hay cuadrillas: pide a supervisión que asigne el rol"}</option>
+                {crews.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.display_name} · {t.open_assigned} en curso
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              variant="primary"
+              disabled={!dispatchTo || patch.isPending}
+              onClick={() => patch.mutate({ assigned_to_id: dispatchTo, validate_reports: true })}
+            >
+              {inc.assigned_to ? "Reasignar" : "Validar y enviar"}
+            </Button>
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="space-y-3">
@@ -149,24 +177,7 @@ export default function IncidentDetailPage() {
             <dt className="text-warm">Asignada a</dt>
             <dd className="text-right">{inc.assigned_to?.display_name ?? "Nadie"}</dd>
           </dl>
-          {supervisor && !closed && (
-            <label className="mt-5 block">
-              <span className="label">Asignar a técnico</span>
-              <select
-                className="field"
-                value={inc.assigned_to?.id ?? ""}
-                onChange={(e) => (e.target.value ? patch.mutate({ assigned_to_id: e.target.value }) : patch.mutate({ unassign: true }))}
-              >
-                <option value="">Sin asignar</option>
-                {techs.data?.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.display_name} · {t.open_assigned} abiertos
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {!closed && canAct && (
+          {!closed && (
             <label className="mt-4 block">
               <span className="label">Tipo de fuga observado</span>
               <select className="field" value={inc.leak_flow ?? ""} onChange={(e) => e.target.value && patch.mutate({ leak_flow: e.target.value })}>

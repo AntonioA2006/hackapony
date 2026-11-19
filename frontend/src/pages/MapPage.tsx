@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import type { LatLngBoundsExpression } from "leaflet";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { isStaff } from "../shared/roles";
+import { isOperator } from "../shared/roles";
 import { useRegionCounts } from "../shared/staff/api";
 import { apiFetch } from "../shared/api/client";
 import { useAuth } from "../shared/auth/AuthContext";
@@ -88,7 +88,7 @@ export default function MapPage() {
   const statesGeo = useStatesGeo();
   const munGeo = useMunicipalitiesGeo(region.cve_ent);
 
-  const staff = isStaff(user?.role);
+  const staff = isOperator(user?.role); // despacho: mapa completo y capa de incidencias (la cuadrilla ve el público)
   const [search, setSearch] = useSearchParams();
   const fLat = Number(search.get("lat"));
   const fLon = Number(search.get("lon"));

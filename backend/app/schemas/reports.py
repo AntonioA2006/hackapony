@@ -22,6 +22,19 @@ class ReportCreate(BaseModel):
     leak_flow: LeakFlow | None = Field(default=None, description="goteo | chorro | inundacion")
     device_latitude: float | None = Field(default=None, ge=-90, le=90)
     device_longitude: float | None = Field(default=None, ge=-180, le=180)
+    contact_phone: str | None = Field(default=None, description="10 dígitos (México); solo lo ve el personal")
+
+    @field_validator("contact_phone", mode="before")
+    @classmethod
+    def _phone(cls, v):
+        if v in (None, ""):
+            return None
+        digits = "".join(ch for ch in str(v) if ch.isdigit())
+        if digits.startswith("52") and len(digits) == 12:
+            digits = digits[2:]
+        if len(digits) != 10:
+            raise ValueError("El teléfono debe tener 10 dígitos")
+        return digits
 
     @field_validator("title", "description", "address_reference", mode="before")
     @classmethod

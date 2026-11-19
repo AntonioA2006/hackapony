@@ -1,7 +1,7 @@
 import L, { type LatLngBoundsExpression, type PathOptions } from "leaflet";
 import type { Feature, Geometry } from "geojson";
 import { useEffect, useMemo, useRef } from "react";
-import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { BAND_LABELS, CATEGORY_LABELS, fmtPct, label } from "../labels";
 import { useMexicoOutline, type RegionFeatureCollection, type Water } from "../region/api";
 import { mapTileAttribution, mapTileUrl } from "./tileConfig";
@@ -82,6 +82,8 @@ type Props = {
   regionColors?: Record<string, string> | null;
   /** Enlace a la ficha del personal desde el popup. */
   detailHref?: (id: string) => string;
+  /** Línea de ruta directa (cuadrilla): desde la posición del dispositivo hasta la fuga. */
+  route?: { from: [number, number]; to: [number, number] } | null;
   /** bbox del viewport ya recortado, o null si la vista no toca la zona de operación. */
   onViewportChange?: (bbox: string | null) => void;
 };
@@ -93,6 +95,31 @@ function FlyTo({ focus }: { focus?: Props["focus"] }) {
   useEffect(() => {
     if (focus) map.flyTo([focus.lat, focus.lon], 17, { duration: 1.2 });
   }, [map, focus?.lat, focus?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+function FitRoute({ route }: { route: { from: [number, number]; to: [number, number] } }) {
+  const map = useMap();
+  useEffect(() => {
+    map.fitBounds([route.from, route.to], { padding: [40, 40], maxZoom: 17 });
+  }, [map, route.from[0], route.from[1], route.to[0], route.to[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/** Evita cuadros grises al rotar el teléfono o cambiar el tamaño del contenedor (WebView, plegables). */
+function AutoResize() {
+  const map = useMap();
+  useEffect(() => {
+    const el = map.getContainer();
+    const ro = new ResizeObserver(() => map.invalidateSize({ animate: false }));
+    ro.observe(el);
+    const onRotate = () => setTimeout(() => map.invalidateSize({ animate: false }), 250);
+    window.addEventListener("orientationchange", onRotate);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", onRotate);
+    };
+  }, [map]);
   return null;
 }
 
@@ -167,6 +194,7 @@ export default function IncidentsMap({
   focus,
   regionColors,
   detailHref,
+  route,
   onViewportChange,
 }: Props) {
   const regionKey = useMemo(
@@ -214,6 +242,14 @@ export default function IncidentsMap({
       <FitBounds bounds={focus ? null : bounds} />
       <FlyTo focus={focus} />
       {focus && <Marker position={[focus.lat, focus.lon]} icon={focusIcon} zIndexOffset={1000} />}
+      {route && (
+        <>
+          <Polyline positions={[route.from, route.to]} pathOptions={{ color: "#0b2338", weight: 3, dashArray: "6 6", opacity: 0.85 }} />
+          <CircleMarker center={route.from} radius={7} pathOptions={{ color: "#ffffff", weight: 3, fillColor: "#1baf7a", fillOpacity: 1 }} />
+          <FitRoute route={route} />
+        </>
+      )}
+      <AutoResize />
       {onViewportChange && !pickMode && <ViewportReporter onChange={onViewportChange} />}
       {regions && (
         <GeoJSON

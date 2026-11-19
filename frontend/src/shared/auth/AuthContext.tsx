@@ -37,7 +37,7 @@ type AuthState = {
   waking: boolean;
   retrySession: () => Promise<void>;
   checkEmailVerified: () => Promise<boolean>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (email: string, password: string, display_name: string) => Promise<void>;
   logout: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ message: string; dev_reset_token?: string | null }>;
@@ -127,11 +127,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [checkEmailVerified]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     if (firebaseEnabled) {
       await signInWithEmailAndPassword(firebaseAuth(), email, password);
-      await refreshUser();
-      return;
+      const me = await withWakeRetry(() => apiFetch<User>("/users/me"), () => setWaking(true)).finally(() => setWaking(false));
+      setUser(me);
+      setSessionError(null);
+      return me;
     }
     const data = await apiFetch<{ user: User; tokens: Tokens }>("/auth/login", {
       method: "POST",
@@ -139,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     setTokens(data.tokens);
     setUser(data.user);
+    return data.user;
   };
 
   const register = async (email: string, password: string, display_name: string) => {
