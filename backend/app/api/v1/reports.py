@@ -16,6 +16,7 @@ from app.models.entities import IncidentHistory, Report, ReportPhoto
 from app.schemas.common import PaginatedResponse
 from app.schemas.reports import HistoryItem, ReportCreate, ReportCreateResponse, ReportOut, ReportPatch, ReportPhotoOut
 from app.services.grouping import nearby_public_suggestions, process_report_grouping
+from app.services.photo_retention import purge_report_photos
 from app.services.photo_sanitize import sanitize_photo
 from app.services.notifications import notify_user
 from app.services.spatial import point_wkt
@@ -187,6 +188,8 @@ def patch_report(
                 raise HTTPException(422, detail="Motivo requerido para rechazo")
             report.status = payload.status
             report.rejection_reason = payload.rejection_reason
+            if report.incident_id is None and payload.status in (ReportStatus.resolved, ReportStatus.rejected):
+                purge_report_photos(db, report, user.id)
             notify_user(
                 db,
                 report.user_id,

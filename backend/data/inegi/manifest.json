@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-11-19T16:22:31+00:00",
+  "license": "INEGI — Términos de Libre Uso de la Información (https://www.inegi.org.mx/inegi/terminos.html)",
+  "geometries": {
+    "source": "https://gaia.inegi.org.mx/wscatgeo/v2/geo/mgee/ y https://gaia.inegi.org.mx/wscatgeo/v2/geo/mgem/{cve_ent}",
+    "inegi_metadata": {
+      "Fuente_informacion_vectorial": "INEGI. Marco Geoestadístico, diciembre de 2025",
+      "Fuente_informacion_estadistica": "INEGI. Censo de Población y Vivienda, 2020"
+    },
+    "simplify_tolerance_deg": 0.0005,
+    "states": 32,
+    "municipalities": 2478
+  },
+  "water_indicators": {
+    "source": "https://www.inegi.org.mx/contenidos/programas/ccpv/2020/datosabiertos/iter/iter_00_cpv2020_csv.zip",
+    "dataset": "INEGI. Censo de Población y Vivienda 2020, Principales resultados por localidad (ITER)",
+    "variables": {
+      "viviendas": "TVIVPARHAB — total de viviendas particulares habitadas",
+      "con_agua_entubada": "VPH_AGUADV — disponen de agua entubada en el ámbito de la vivienda",
+      "sin_agua_entubada": "VPH_AGUAFV — no disponen de agua entubada en el ámbito de la vivienda",
+      "con_tinaco": "VPH_TINACO — disponen de tinaco",
+      "con_cisterna": "VPH_CISTER — disponen de cisterna o aljibe"
+    },
+    "rows": 2501
+  }
+}

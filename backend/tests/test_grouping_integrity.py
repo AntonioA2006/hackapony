@@ -72,7 +72,7 @@ def _seed_ageb(min_lon: float, min_lat: float, max_lon: float, max_lat: float, p
                 """
                 INSERT INTO municipalities (id, cve_ent, cve_mun, cvegeo, name, geom, pob_total)
                 VALUES (gen_random_uuid(), '99', '999', :cvegeo, 'Pytest',
-                        ST_GeogFromText('SRID=4326;' || :wkt), :pob)
+                        ST_GeomFromText(:wkt, 4326), :pob)
                 RETURNING id
                 """
             ),

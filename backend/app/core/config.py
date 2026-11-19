@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
 
+    # Firebase Authentication: si se define, la API acepta ID tokens de Firebase (además del JWT propio)
+    firebase_project_id: str | None = None
+
     # Crea un superadministrador al arrancar si no existe (solo se usa si ambos están definidos)
     bootstrap_superadmin_email: str | None = None
     bootstrap_superadmin_password: str | None = None

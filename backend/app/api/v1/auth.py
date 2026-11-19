@@ -75,7 +75,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     check_rate_limit(f"login-ip:{client_ip}", max_calls=20, window_seconds=900)
     check_rate_limit(f"login-email:{payload.email.lower()}", max_calls=5, window_seconds=900)
     user = db.scalar(select(User).where(func.lower(User.email) == payload.email.lower()))
-    if not user or not verify_password(payload.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Usuario inactivo")

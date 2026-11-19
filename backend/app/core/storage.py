@@ -13,6 +13,7 @@ from app.core.config import get_settings
 class BlobStorage(Protocol):
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
     def get(self, key: str) -> bytes | None: ...
+    def delete(self, key: str) -> None: ...
 
 
 class LocalStorage:
@@ -34,6 +35,14 @@ class LocalStorage:
     def get(self, key: str) -> bytes | None:
         path = self._path(key)
         return path.read_bytes() if path.is_file() else None
+
+    def delete(self, key: str) -> None:
+        path = self._path(key)
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()  # carpeta del reporte, si quedó vacía
+        except OSError:
+            pass
 
 
 class S3Storage:
@@ -63,6 +72,10 @@ class S3Storage:
             if exc.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
                 return None
             raise
+
+    def delete(self, key: str) -> None:
+        # S3 delete_object es idempotente: no falla si la clave ya no existe
+        self.client.delete_object(Bucket=self.bucket, Key=key)
 
 
 @lru_cache
