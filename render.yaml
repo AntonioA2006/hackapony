@@ -9,6 +9,8 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    # Plan gratuito sin pre-deploy: el arranque hace de release (migraciones + datos INEGI idempotentes)
+    dockerCommand: sh -c 'alembic upgrade head && python -m scripts.load_inegi_seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'
     healthCheckPath: /health
     autoDeploy: true
     envVars:
