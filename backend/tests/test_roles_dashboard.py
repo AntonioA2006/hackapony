@@ -90,9 +90,13 @@ def test_operator_validates_and_dispatches_crew_closes(client):
     assert client.get(f"/api/v1/incidents/{iid}/detail", headers=crew).status_code == 404
     assert iid not in [i["id"] for i in client.get("/api/v1/incidents?status=active", headers=crew).json()["items"]]
 
-    # El operador no puede cerrar la atención; sí validar y despachar
+    # El operador no puede cerrar la atención ni enviar a cuadrilla antes de validar
     assert client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"status": "resolved"}).status_code == 403
-    res = client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"assigned_to_id": crew_id, "validate_reports": True})
+    too_soon = client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"assigned_to_id": crew_id, "validate_reports": True})
+    assert too_soon.status_code == 422, too_soon.text
+    validated = client.patch(f"/api/v1/reports/{rep['id']}", headers=op, json={"status": "validated"})
+    assert validated.status_code == 200, validated.text
+    res = client.patch(f"/api/v1/incidents/{iid}", headers=op, json={"assigned_to_id": crew_id})
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["status"] == "in_progress" and body["assigned_to"]["id"] == crew_id and body["validated"] is True
@@ -190,3 +194,13 @@ def test_staff_detail_includes_report_photos(client, tmp_path, monkeypatch):
         assert client.get(f"/api/v1/reports/{rep['id']}/photos", headers=intrusa).status_code == 404
     finally:
         storage.get_storage.cache_clear()
+
+
+def test_public_home_stats(client):
+    res = client.get("/api/v1/statistics/public")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert isinstance(body["resolved"], int) and body["resolved"] >= 0
+    assert body["satisfaction_pct"] is None or 0 <= body["satisfaction_pct"] <= 100
+    assert body["avg_resolution_hours"] is None or body["avg_resolution_hours"] >= 0
+    assert isinstance(body["ratings"], int)

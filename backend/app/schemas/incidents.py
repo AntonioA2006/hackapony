@@ -49,7 +49,7 @@ class IncidentPatch(BaseModel):
     assigned_to_id: uuid.UUID | None = None
     assign_to_me: bool = False
     unassign: bool = False
-    # Despacho: al enviar a cuadrilla, valida en el mismo paso los reportes pendientes de la incidencia
+    # Solo aplica si la incidencia ya tiene un reporte validado. No sustituye esa validación.
     validate_reports: bool = False
 
 

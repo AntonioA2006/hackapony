@@ -410,6 +410,10 @@ def patch_incident(
         raise HTTPException(403, detail="La cuadrilla solo puede actualizar el estado de sus órdenes")
     old = incident.status
     events: list[tuple[str, dict]] = []
+    assigning = bool(payload.assign_to_me or payload.assigned_to_id is not None)
+    already_validated = any(r.status == ReportStatus.validated for r in incident.reports)
+    if assigning and not already_validated:
+        raise HTTPException(422, detail="Primero valida el reporte. Después puedes asignarlo a una cuadrilla.")
 
     if payload.validate_reports:
         validated = 0
