@@ -1,0 +1,157 @@
+name: App móvil
+
+# Compila la app de Kotlin Multiplatform y deja el APK de cada versión.
+# - push / PR que toquen mobile/: pruebas + APK de depuración como artefacto (nombre con la versión).
+# - tag mobile-v<versionName> (p. ej. mobile-v1.0.0): APK de release publicado en GitHub Releases.
+# La versión sale de mobile/version.properties; el tag debe coincidir con versionName.
+on:
+  push:
+    branches: [main]
+    paths: ["mobile/**", ".github/workflows/mobile.yml"]
+    tags: ["mobile-v*"]
+  pull_request:
+    branches: [main]
+    paths: ["mobile/**", ".github/workflows/mobile.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      code: ${{ steps.v.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Leer versión
+        run: |
+          name=$(grep '^versionName=' version.properties | cut -d= -f2)
+          code=$(grep '^versionCode=' version.properties | cut -d= -f2)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "### App móvil v$name (código $code)" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$GITHUB_REF" == refs/tags/mobile-v* && "${GITHUB_REF_NAME#mobile-v}" != "$name" ]]; then
+            echo "::error::El tag $GITHUB_REF_NAME no coincide con versionName=$name en mobile/version.properties"
+            exit 1
+          fi
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Pruebas de flujos y capturas (desktop)
+        run: ./gradlew --no-daemon :shared:desktopTest
+      - name: APK de depuración
+        run: ./gradlew --no-daemon :androidApp:assembleDebug
+      - name: Renombrar con la versión
+        run: |
+          mkdir -p dist
+          cp androidApp/build/outputs/apk/debug/androidApp-debug.apk "dist/agua-alerta-${{ needs.version.outputs.name }}-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agua-alerta-android-${{ needs.version.outputs.name }}-debug
+          path: mobile/dist/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-${{ needs.version.outputs.name }}
+          path: mobile/shared/build/screenshots
+          if-no-files-found: ignore
+
+  ios:
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Framework Shared (iPhone y simulador)
+        run: ./gradlew --no-daemon :shared:linkReleaseFrameworkIosArm64 :shared:linkDebugFrameworkIosSimulatorArm64
+      - name: Empaquetar
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent shared/build/bin/iosArm64/releaseFramework/Shared.framework \
+            "dist/Shared-ios-${{ needs.version.outputs.name }}.framework.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agua-alerta-ios-framework-${{ needs.version.outputs.name }}
+          path: mobile/dist/*.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/mobile-v')
+    needs: [version, android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.name }}
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Llave de firma
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: APK de release
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :androidApp:assembleRelease :androidApp:assembleDebug
+      - name: Reunir archivos
+        run: |
+          mkdir -p dist
+          cp androidApp/build/outputs/apk/debug/androidApp-debug.apk "dist/agua-alerta-$VERSION-debug.apk"
+          if [ -f androidApp/build/outputs/apk/release/androidApp-release.apk ]; then
+            cp androidApp/build/outputs/apk/release/androidApp-release.apk "dist/agua-alerta-$VERSION.apk"
+          else
+            echo "::warning::Sin secretos ANDROID_KEYSTORE_*: el release no está firmado; se publica solo el APK de depuración."
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: agua-alerta-ios-framework-${{ needs.version.outputs.name }}
+          path: mobile/dist
+      - name: Publicar en GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "App móvil v$VERSION" \
+            --notes "APK de Android v$VERSION (código ${{ needs.version.outputs.code }}) y framework Shared para iOS. Instala el APK en Android 7.0 o superior."
