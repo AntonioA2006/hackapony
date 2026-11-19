@@ -1,11 +1,11 @@
-import mimetypes
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from app.core.rate_limit import check_rate_limit
-from fastapi.responses import FileResponse
+from app.core.storage import get_storage
+from app.services.photos import InvalidImage, sanitize_image
+from fastapi.responses import Response
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -228,17 +228,16 @@ async def upload_photo(
     count = db.scalar(select(func.count()).where(ReportPhoto.report_id == report.id)) or 0
     if count >= 5:
         raise HTTPException(400, detail="Máximo 5 fotografías")
-    content = await file.read()
+    content = await file.read(settings.max_photo_bytes + 1)
     if len(content) > settings.max_photo_bytes:
         raise HTTPException(413, detail="Archivo demasiado grande")
-    mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
-    if mime not in settings.allowed_mime_set:
-        raise HTTPException(415, detail="MIME no permitido")
-    storage_key = f"{report.id}/{uuid.uuid4()}{mimetypes.guess_extension(mime) or '.bin'}"
-    dest = Path(settings.photos_path) / storage_key
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(content)
-    photo = ReportPhoto(report_id=report.id, storage_key=storage_key, mime_type=mime, size_bytes=len(content))
+    try:
+        clean, mime, ext = sanitize_image(content)
+    except InvalidImage as exc:
+        raise HTTPException(415, detail=str(exc)) from exc
+    storage_key = f"{report.id}/{uuid.uuid4()}{ext}"
+    get_storage().put(storage_key, clean, mime)
+    photo = ReportPhoto(report_id=report.id, storage_key=storage_key, mime_type=mime, size_bytes=len(clean))
     db.add(photo)
     db.commit()
     db.refresh(photo)
@@ -261,10 +260,10 @@ def get_photo_content(
     is_admin = user.role in (UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)
     if user.role == UserRole.CIUDADANO and report.user_id != user.id:
         raise HTTPException(403, detail="Sin permiso")
-    path = Path(settings.photos_path) / photo.storage_key
-    if not path.is_file():
+    data = get_storage().get(photo.storage_key)
+    if data is None:
         raise HTTPException(404, detail="Archivo no disponible")
-    return FileResponse(path, media_type=photo.mime_type)
+    return Response(content=data, media_type=photo.mime_type, headers={"Cache-Control": "private, max-age=300"})
 
 
 @router.get("/{report_id}/history", response_model=list[HistoryItem])
