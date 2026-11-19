@@ -60,9 +60,11 @@ def test_citizen_cannot_use_staff_endpoints(client):
 def test_public_map_shows_unvalidated_incident_flagged(client):
     _, cit = _user(UserRole.CIUDADANO)
     rep = _report(client, cit)
-    items = client.get("/api/v1/incidents/public?page_size=500").json()["items"]
+    lat, lon = rep["latitude"], rep["longitude"]
+    bbox = f"{lon - 0.02},{lat - 0.02},{lon + 0.02},{lat + 0.02}"
+    items = client.get("/api/v1/incidents/public", params={"bbox": bbox}).json()["items"]
     mine = next(i for i in items if i["id"] == rep["incident_id"])
-    assert mine["validated"] is False
+    assert mine["validated"] is False and mine["awaiting_validation"] is True
     assert mine["leak_flow"] == "chorro"
     assert mine["state_name"]  # región resuelta con INEGI
 

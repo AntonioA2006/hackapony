@@ -69,6 +69,8 @@ Propietario o admin. Incluye fotos metadata, historial resumido.
 
 Público o autenticado. Query: `lat`, `lon`, `radius_m` (default 50). No expone PII.
 
+`latitude` y `longitude` de cada reporte usan la misma política que el mapa (ADR-016), con el id del reporte como clave. La búsqueda por radio sigue usando la ubicación real: indica que hay un reporte cerca, no el punto exacto. El dueño y el admin, en el resto de rutas de reportes, ven la coordenada que se capturó.
+
 ## POST `/reports/{id}/photos`
 
 `multipart/form-data`, campo `file`. **201** metadata foto.

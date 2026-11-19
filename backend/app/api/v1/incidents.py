@@ -16,6 +16,7 @@ from app.services.notifications import notify_user
 from app.services.photo_retention import CLOSED_STATUSES, purge_incident_photos
 from app.domain.waste import estimated_liters
 from app.services.priority import recalculate_incident_urgency
+from app.services.public_geo import PUBLIC_PAGE_SIZE_DEFAULT, BBoxError, clamp_public_page, parse_bbox
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -24,6 +25,7 @@ _ROW_SQL = text(
     """
     SELECT i.id,
            ST_Y(i.centroid::geometry) AS lat, ST_X(i.centroid::geometry) AS lon,
+           ST_Y(i.public_location::geometry) AS pub_lat, ST_X(i.public_location::geometry) AS pub_lon,
            m.name AS municipality_name, m.cvegeo, m.cve_ent, s.name AS state_name,
            EXISTS (SELECT 1 FROM reports r WHERE r.incident_id = i.id AND r.status = 'validated') AS validated,
            u.id AS assignee_id, u.display_name AS assignee_name
@@ -44,7 +46,9 @@ def _extras(db: Session, incidents: list[Incident]) -> dict:
     return {r["id"]: r for r in rows}
 
 
-def _public(inc: Incident, x) -> PublicIncidentOut:
+def _public(inc: Incident, x, *, exact: bool = False) -> PublicIncidentOut:
+    """Vista pública: coordenadas ofuscadas (public_location, D5). `exact` solo para el personal."""
+    lat, lon = (x["lat"], x["lon"]) if exact or x["pub_lat"] is None else (x["pub_lat"], x["pub_lon"])
     return PublicIncidentOut(
         id=str(inc.id),
         public_id=inc.public_id,
@@ -52,11 +56,12 @@ def _public(inc: Incident, x) -> PublicIncidentOut:
         status=inc.status,
         urgency_score=float(inc.urgency_score),
         priority_band=inc.priority_band,
-        latitude=x["lat"],
-        longitude=x["lon"],
+        latitude=lat,
+        longitude=lon,
         report_count=inc.report_count,
         confirmation_count=inc.confirmation_count,
         validated=bool(x["validated"]),
+        awaiting_validation=not bool(x["validated"]),
         leak_flow=inc.leak_flow,
         state_name=x["state_name"],
         municipality_name=x["municipality_name"],
@@ -66,7 +71,7 @@ def _public(inc: Incident, x) -> PublicIncidentOut:
 
 def _full(inc: Incident, x) -> IncidentOut:
     return IncidentOut(
-        **_public(inc, x).model_dump(),
+        **_public(inc, x, exact=True).model_dump(),
         updated_at=inc.updated_at,
         aggregated_severity=inc.aggregated_severity,
         municipality_id=str(inc.municipality_id) if inc.municipality_id else None,
@@ -95,15 +100,20 @@ def _many_full(db: Session, items: list[Incident]) -> list[IncidentOut]:
 def public_incidents(
     response: Response,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = PUBLIC_PAGE_SIZE_DEFAULT,
     cve_ent: str | None = Query(None, pattern=r"^\d{1,2}$", description="Clave de entidad INEGI"),
     cvegeo: str | None = Query(None, pattern=r"^\d{5}$", description="Clave geoestadística del municipio"),
-    bbox: str | None = Query(None, description="minLon,minLat,maxLon,maxLat"),
+    bbox: str | None = Query(None, max_length=200, description="minLon,minLat,maxLon,maxLat"),
     db: Session = Depends(get_db),
 ):
-    page_size = min(max(page_size, 1), 500)
-    # Se publican también las incidencias sin validar (marcadas en el mapa); se ocultan las que solo
-    # tienen reportes rechazados por el personal.
+    page, page_size = clamp_public_page(page, page_size)
+    if bbox:
+        try:
+            min_lon, min_lat, max_lon, max_lat = parse_bbox(bbox)
+        except BBoxError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    # Un reporte entra al mapa en cuanto se envía (marcado como sin validar). Se oculta si todos sus
+    # reportes fueron rechazados o si la incidencia ya se cerró.
     publishable_ids = (
         select(Report.incident_id)
         .where(Report.incident_id.isnot(None), Report.status != ReportStatus.rejected)
@@ -120,17 +130,18 @@ def public_incidents(
         if cve_ent:
             q = q.where(Municipality.cve_ent == cve_ent.zfill(2))
     if bbox:
-        try:
-            xmin, ymin, xmax, ymax = (float(v) for v in bbox.split(","))
-        except ValueError as exc:
-            raise HTTPException(422, detail="bbox debe ser minLon,minLat,maxLon,maxLat") from exc
+        # && sobre geography usa el índice GiST de public_location. Filtrar el centroide permitiría
+        # acorralar el punto real encogiendo el rectángulo.
         q = q.where(
-            func.ST_Intersects(
-                func.Geometry(Incident.centroid), func.ST_MakeEnvelope(xmin, ymin, xmax, ymax, 4326)
-            )
+            text(
+                "incidents.public_location && "
+                "ST_MakeEnvelope(:bb_xmin, :bb_ymin, :bb_xmax, :bb_ymax, 4326)::geography"
+            ).bindparams(bb_xmin=min_lon, bb_ymin=min_lat, bb_xmax=max_lon, bb_ymax=max_lat)
         )
     total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
-    items_db = db.scalars(q.order_by(Incident.urgency_score.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    items_db = db.scalars(
+        q.order_by(Incident.urgency_score.desc(), Incident.id).offset((page - 1) * page_size).limit(page_size)
+    ).all()
     response.headers["Cache-Control"] = "public, max-age=30"
     ex = _extras(db, list(items_db))
     return PaginatedResponse(

@@ -1,10 +1,11 @@
 import L, { type LatLngBoundsExpression, type PathOptions } from "leaflet";
 import type { Feature, Geometry } from "geojson";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { BAND_LABELS, CATEGORY_LABELS, fmtPct, label } from "../labels";
 import { useMexicoOutline, type RegionFeatureCollection, type Water } from "../region/api";
 import { mapTileAttribution, mapTileUrl } from "./tileConfig";
+import { MAP_OPERATING_BOUNDS, VIEWPORT_DEBOUNCE_MS, boundsToQueryBBox } from "./viewportBbox";
 import { BAND_COLORS, BAND_RADIUS, waterColor } from "./waterScale";
 
 export type MapIncident = {
@@ -20,6 +21,7 @@ export type MapIncident = {
   report_count: number;
   confirmation_count: number;
   primary_category: string;
+  awaiting_validation?: boolean;
 };
 
 export const MEXICO_BOUNDS: LatLngBoundsExpression = [
@@ -28,8 +30,8 @@ export const MEXICO_BOUNDS: LatLngBoundsExpression = [
 ];
 // Margen para poder desplazarse un poco más allá de la frontera sin salir de la región
 const MAX_BOUNDS: LatLngBoundsExpression = [
-  [11.5, -122.5],
-  [35.5, -83.0],
+  [MAP_OPERATING_BOUNDS.minLat, MAP_OPERATING_BOUNDS.minLon],
+  [MAP_OPERATING_BOUNDS.maxLat, MAP_OPERATING_BOUNDS.maxLon],
 ];
 const WORLD_RING: [number, number][] = [
   [-89, -179.9],
@@ -79,6 +81,8 @@ type Props = {
   regionColors?: Record<string, string> | null;
   /** Enlace a la ficha del personal desde el popup. */
   detailHref?: (id: string) => string;
+  /** bbox del viewport ya recortado, o null si la vista no toca la zona de operación. */
+  onViewportChange?: (bbox: string | null) => void;
 };
 
 const focusIcon = L.divIcon({ className: "", iconSize: [22, 22], iconAnchor: [11, 11], html: '<div class="aa-focus-pin"></div>' });
@@ -94,8 +98,28 @@ function FlyTo({ focus }: { focus?: Props["focus"] }) {
 function FitBounds({ bounds }: { bounds?: LatLngBoundsExpression | null }) {
   const map = useMap();
   useEffect(() => {
-    if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
+    if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 13, animate: false });
   }, [map, bounds]);
+  return null;
+}
+
+function ViewportReporter({ onChange }: { onChange: (bbox: string | null) => void }) {
+  const map = useMap();
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    let timer: number | undefined;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => onChangeRef.current(boundsToQueryBBox(map.getBounds())), VIEWPORT_DEBOUNCE_MS);
+    };
+    map.on("moveend", schedule);
+    schedule();
+    return () => {
+      window.clearTimeout(timer);
+      map.off("moveend", schedule);
+    };
+  }, [map]);
   return null;
 }
 
@@ -136,11 +160,12 @@ export default function IncidentsMap({
   pickMode,
   pin,
   onPick,
-  className = "h-[62vh] min-h-[420px]",
+  className = "h-[52vh] min-h-[240px] sm:h-[62vh] sm:min-h-[420px]",
   onConfirm,
   focus,
   regionColors,
   detailHref,
+  onViewportChange,
 }: Props) {
   const regionKey = useMemo(
     () =>
@@ -174,7 +199,7 @@ export default function IncidentsMap({
       bounds={center ? undefined : MEXICO_BOUNDS}
       center={center}
       zoom={center ? zoom : undefined}
-      className={`w-full overflow-hidden rounded-card border border-line ${className}`}
+      className={`w-full touch-manipulation overflow-hidden rounded-card border border-line ${className}`}
       scrollWheelZoom
       maxBounds={MAX_BOUNDS}
       maxBoundsViscosity={0.9}
@@ -187,6 +212,7 @@ export default function IncidentsMap({
       <FitBounds bounds={focus ? null : bounds} />
       <FlyTo focus={focus} />
       {focus && <Marker position={[focus.lat, focus.lon]} icon={focusIcon} zIndexOffset={1000} />}
+      {onViewportChange && !pickMode && <ViewportReporter onChange={onViewportChange} />}
       {regions && (
         <GeoJSON
           key={regionKey}
@@ -209,9 +235,9 @@ export default function IncidentsMap({
           center={[inc.latitude, inc.longitude]}
           radius={BAND_RADIUS[inc.priority_band] ?? 6}
           pathOptions={{
-            color: inc.validated === false ? "#0b2338" : "#ffffff",
+            color: inc.validated === false || inc.awaiting_validation ? "#0b2338" : "#ffffff",
             weight: 2,
-            dashArray: inc.validated === false ? "3 3" : undefined,
+            dashArray: inc.validated === false || inc.awaiting_validation ? "3 3" : undefined,
             fillColor: BAND_COLORS[inc.priority_band] ?? "#94a3b4",
             fillOpacity: 0.95,
           }}
@@ -228,7 +254,7 @@ export default function IncidentsMap({
               {(inc.municipality_name || inc.state_name) && (
                 <p className="text-warm">{[inc.municipality_name, inc.state_name].filter(Boolean).join(", ")}</p>
               )}
-              {inc.validated === false && <p className="text-[12px] font-medium text-[#7a5a05]">Sin validar todavía</p>}
+              {(inc.validated === false || inc.awaiting_validation) && <p className="text-[12px] font-medium text-[#7a5a05]">Sin validar todavía</p>}
               <p className="text-warm">
                 Prioridad {label(BAND_LABELS, inc.priority_band).toLowerCase()} · {inc.report_count} reporte(s) ·{" "}
                 {inc.confirmation_count} confirmación(es)
@@ -241,7 +267,7 @@ export default function IncidentsMap({
               {onConfirm && (
                 <button
                   type="button"
-                  className="mt-1 rounded-full border border-line px-3 py-1 text-[12px] text-ink hover:border-muted"
+                  className="mt-1 min-h-11 rounded-full border border-line px-4 py-2 text-[13px] text-ink hover:border-muted"
                   onClick={() => onConfirm(inc.id)}
                 >
                   Yo también la vi

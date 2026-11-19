@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getApiBase } from "./client";
+import { apiFetch, getApiBase } from "./client";
 
 function mockLocation(parts: Partial<Location>) {
   const base = {
@@ -38,5 +38,29 @@ describe("getApiBase", () => {
     vi.stubEnv("VITE_API_BASE_URL", "");
     mockLocation({ hostname: "192.168.1.50", port: "5173", host: "192.168.1.50:5173" });
     expect(getApiBase()).toBe("http://192.168.1.50:8000/api/v1");
+  });
+});
+
+describe("apiFetch", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000/api/v1");
+  });
+
+  it("cancela la petición cuando la señal del caller aborta", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          const fail = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+          if (init.signal?.aborted) fail();
+          else init.signal?.addEventListener("abort", fail, { once: true });
+        });
+      }),
+    );
+    const controller = new AbortController();
+    const pending = apiFetch("/incidents/public", { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });

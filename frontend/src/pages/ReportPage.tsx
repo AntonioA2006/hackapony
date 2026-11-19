@@ -447,7 +447,7 @@ export default function ReportPage() {
               "Aún no hay punto: toca el mapa en el lugar exacto del problema."
             )}
           </p>
-          <IncidentsMap center={center} zoom={zoom} pin={point} pickMode onPick={(la, lo) => choosePoint(la, lo)} className="h-[520px]" />
+          <IncidentsMap center={center} zoom={zoom} pin={point} pickMode onPick={(la, lo) => choosePoint(la, lo)} className="h-[46vh] min-h-[240px] sm:h-[520px]" />
           {show("point") && <p className="text-[12px] text-critical" role="alert">{errors.point}</p>}
           {point && (
             <p className="font-mono text-[12px] text-ash">

@@ -127,6 +127,8 @@ class Incident(Base):
         Enum(LeakSeverity, name="leak_severity", create_type=False),
     )
     centroid: Mapped[object] = mapped_column(Geography(geometry_type="POINT", srid=4326), nullable=False)
+    # Punto que ve el mapa público (snap ~30 m + jitter HMAC). El centroide real queda para operación.
+    public_location: Mapped[object] = mapped_column(Geography(geometry_type="POINT", srid=4326), nullable=False)
     report_count: Mapped[int] = mapped_column(Integer, default=0)
     confirmation_count: Mapped[int] = mapped_column(Integer, default=0)
     urgency_score: Mapped[float] = mapped_column(Numeric(5, 2), default=0)

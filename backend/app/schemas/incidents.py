@@ -18,6 +18,7 @@ class PublicIncidentOut(BaseModel):
     report_count: int
     confirmation_count: int
     validated: bool = False  # al menos un reporte validado por personal
+    awaiting_validation: bool = False  # compatibilidad: ningún reporte validado todavía
     leak_flow: LeakFlow | None = None
     state_name: str | None = None
     municipality_name: str | None = None

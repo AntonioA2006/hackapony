@@ -5,9 +5,18 @@
 | | |
 |--|--|
 | **Permiso** | Público |
-| **Descripción** | Mapa ciudadano sin PII |
+| **Descripción** | Mapa ciudadano sin PII. D5: filtra por viewport y no publica el punto exacto |
 
-**Query:** `bbox`, `category`, `status`, `page`
+**Query**
+
+| Parámetro | Regla |
+|-----------|--------|
+| `bbox` | Opcional. `minLon,minLat,maxLon,maxLat` en WGS84. Cuatro números finitos, `min < max`, longitud en [−180, 180], latitud en [−90, 90], a lo más 50° de ancho y 40° de alto. 422 si no cumple. Sin `bbox` la ruta sigue respondiendo (compatibilidad). |
+| `cve_ent`, `cvegeo` | Opcionales. Recortan por entidad o municipio INEGI. |
+| `page` | Default 1. Valores &lt; 1 se tratan como 1. |
+| `page_size` | Default 100. Se recorta a 1…200. Pedir 500 no es error: la respuesta trae `page_size: 200`. |
+
+El filtro espacial usa `public_location` (índice GiST), no el centroide. `latitude` / `longitude` son ese punto: snap a una malla de ~30 m más un desplazamiento estable derivado de HMAC(`LOCATION_HMAC_SECRET`, id). Ver [ADR-016](../13-decisions/adr-016-ubicacion-publica.md). Entra toda incidencia abierta con al menos un reporte que no esté `rejected`: el reporte se ve en el mapa en cuanto se envía. `awaiting_validation` es verdadero si ninguno de esos reportes está `validated`. Orden: urgencia descendente. `Cache-Control: public, max-age=30`.
 
 **Response item**
 
@@ -19,12 +28,14 @@
   "status": "open",
   "urgency_score": 72.5,
   "priority_band": "high",
-  "latitude": 19.4326,
-  "longitude": -99.1332,
+  "latitude": 19.43271,
+  "longitude": -99.13308,
   "report_count": 3,
   "confirmation_count": 5
 }
 ```
+
+Las coordenadas del ejemplo son ilustrativas: no coinciden con el centroide operativo. `GET /incidents/{id}` (admin) sí devuelve el centroide real.
 
 ## POST `/incidents/{id}/confirm`
 

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LatLngBoundsExpression } from "leaflet";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -81,6 +81,7 @@ export default function MapPage() {
   const { region, setRegion } = useRegion();
   const qc = useQueryClient();
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [bbox, setBbox] = useState<string | null | undefined>(undefined);
 
   const states = useStates();
   const municipalities = useMunicipalities(region.cve_ent);
@@ -106,15 +107,20 @@ export default function MapPage() {
     return out;
   }, [staff, layer, counts.data]);
 
-  const params = new URLSearchParams({ page_size: "500" });
-  if (focus) {
-    // Al enfocar un punto (desde un reporte) se cargan las incidencias alrededor, sin importar la región elegida
-    params.set("bbox", [focus.lon - 0.05, focus.lat - 0.05, focus.lon + 0.05, focus.lat + 0.05].map((v) => v.toFixed(4)).join(","));
-  } else if (region.cvegeo) params.set("cvegeo", region.cvegeo);
-  else if (region.cve_ent) params.set("cve_ent", region.cve_ent);
+  // Al enfocar un punto (desde un reporte) se cargan las incidencias alrededor; si no, las del área visible.
+  const focusBbox = focus
+    ? [focus.lon - 0.05, focus.lat - 0.05, focus.lon + 0.05, focus.lat + 0.05].map((v) => v.toFixed(4)).join(",")
+    : null;
+  const queryBbox = focusBbox ?? bbox;
   const incidents = useQuery({
-    queryKey: ["public-incidents", region.cve_ent, region.cvegeo, focus?.lat, focus?.lon],
-    queryFn: () => apiFetch<Paginated<MapIncident>>(`/incidents/public?${params}`),
+    queryKey: ["public-incidents", queryBbox],
+    enabled: typeof queryBbox === "string",
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    queryFn: ({ signal }) => {
+      const params = new URLSearchParams({ bbox: queryBbox as string, page_size: "200" });
+      return apiFetch<Paginated<MapIncident>>(`/incidents/public?${params}`, { signal });
+    },
   });
 
   const confirmMut = useMutation({
@@ -152,6 +158,7 @@ export default function MapPage() {
   const placeTitle = region.municipality_name ?? region.state_name ?? "México";
   const water = region.cvegeo ? munItem?.water : region.cve_ent ? stateItem?.water : national;
   const list = incidents.data?.items ?? [];
+  const waiting = bbox === undefined || (typeof bbox === "string" && incidents.isLoading && list.length === 0);
 
   return (
     <div className="space-y-6">
@@ -216,6 +223,7 @@ export default function MapPage() {
             regions={region.cve_ent ? munGeo.data : statesGeo.data}
             selectedRegionId={region.cve_ent ? region.cvegeo : null}
             bounds={bounds}
+            onViewportChange={setBbox}
             onConfirm={user ? (id) => confirmMut.mutate(id) : undefined}
             onRegionClick={(id, name) => {
               if (!region.cve_ent) {
@@ -227,8 +235,15 @@ export default function MapPage() {
           />
           <p className="text-[12px] text-warm">
             {region.cve_ent ? "Toca un municipio para enfocarlo." : "Toca un estado para ver sus municipios."}{" "}
-            Los puntos con borde punteado aún no han sido validados por el personal.
+            Los reportes aparecen en cuanto se envían; los de borde punteado aún no los valida el personal. La ubicación
+            pública está aproximada (~30 m) para no mostrar el punto exacto del reporte.
+            {incidents.isFetching ? " Actualizando esta vista…" : ""}
           </p>
+          {incidents.data && incidents.data.total > list.length && (
+            <p className="text-[12px] text-warm">
+              Hay {fmtInt(incidents.data.total)} en esta vista; el mapa muestra las {fmtInt(list.length)} más urgentes.
+            </p>
+          )}
         </div>
         <aside className="space-y-4">
           <WaterPanel title={placeTitle} water={water ?? undefined} />
@@ -238,12 +253,16 @@ export default function MapPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-subheading">Incidencias activas</h2>
-          <Tag>{fmtInt(incidents.data?.total ?? 0)} en total</Tag>
+          <h2 className="text-subheading">En esta vista</h2>
+          <Tag>{fmtInt(incidents.data?.total ?? 0)}</Tag>
         </div>
-        {list.length === 0 && !incidents.isLoading ? (
+        {waiting ? (
           <p className="rounded-card border border-dashed border-muted bg-card px-4 py-6 text-center text-warm">
-            No hay incidencias validadas en esta zona por ahora.
+            Cargando incidencias de esta vista…
+          </p>
+        ) : list.length === 0 ? (
+          <p className="rounded-card border border-dashed border-muted bg-card px-4 py-6 text-center text-warm">
+            No hay reportes en esta vista por ahora.
           </p>
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-card">
@@ -259,13 +278,14 @@ export default function MapPage() {
                 </button>
                 <span className="text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</span>
                 <PriorityTag band={inc.priority_band} />
+                {inc.awaiting_validation && <Tag>Sin validar</Tag>}
                 <span className="text-[12px] text-warm">
                   {inc.report_count} reporte(s) · {inc.confirmation_count} confirmación(es)
                 </span>
                 {user && (
                   <button
                     type="button"
-                    className="ml-auto rounded-full border border-line px-3 py-1 text-[13px] hover:border-muted"
+                    className="ml-auto min-h-11 rounded-full border border-line px-4 py-2 text-[13px] hover:border-muted"
                     onClick={() => confirmMut.mutate(inc.id)}
                     disabled={confirmMut.isPending}
                   >

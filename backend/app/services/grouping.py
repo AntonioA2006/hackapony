@@ -1,4 +1,5 @@
 import math
+import uuid
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from app.core.config import get_settings
 from app.domain.enums import FLOW_ORDER, LEAK_CATEGORIES, IncidentStatus, LeakFlow, LeakSeverity, ReportCategory
 from app.models.entities import Incident, IncidentHistory, Report
 from app.services.priority import recalculate_incident_urgency
+from app.services.public_geo import public_coordinates
 from app.services.spatial import assign_territorial_context, locate, point_wkt
 from app.utils.ids import new_public_id
 
@@ -89,6 +91,7 @@ def recalc_centroid(db: Session, incident: Incident) -> None:
     if not row:
         return
     incident.centroid = point_wkt(row.lat, row.lon)
+    incident.public_location = point_wkt(*public_coordinates(row.lat, row.lon, incident.id))
     incident.report_count = row.n
     incident.aggregated_severity = LeakSeverity(max(row.severities, key=_SEVERITY_ORDER.index))
     if row.flows:
@@ -119,12 +122,16 @@ def link_report_to_incident(
 def create_incident_for_report(
     db: Session, report: Report, lat: float, lon: float, actor_user_id: UUID | None = None
 ) -> Incident:
+    incident_id = uuid.uuid4()
+    pub_lat, pub_lon = public_coordinates(lat, lon, incident_id)
     incident = Incident(
+        id=incident_id,
         public_id=new_public_id("INC"),
         status=IncidentStatus.open,
         primary_category=report.category,
         aggregated_severity=report.severity,
         centroid=point_wkt(lat, lon),
+        public_location=point_wkt(pub_lat, pub_lon),
         report_count=1,
         confirmation_count=0,
         opened_at=datetime.now(UTC),
