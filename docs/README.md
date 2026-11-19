@@ -8,7 +8,7 @@ Plataforma ciudadana para **detección, registro, análisis y priorización** de
 
 1. [01-project/project-overview.md](./01-project/project-overview.md)
 2. [01-project/objectives-and-scope.md](./01-project/objectives-and-scope.md)
-3. [03-architecture/system-architecture.md](./03-architecture/system-architecture.md)
+3. [03-architecture/system-architecture.md](./03-architecture/system-architecture.md) → luego [reference-architecture.md](./03-architecture/reference-architecture.md)
 4. [04-database/entity-relationship.md](./04-database/entity-relationship.md)
 5. [05-api/api-overview.md](./05-api/api-overview.md)
 6. [07-business-logic/incident-prioritization.md](./07-business-logic/incident-prioritization.md)
@@ -44,6 +44,7 @@ Plataforma ciudadana para **detección, registro, análisis y priorización** de
 | Documento | Estado |
 |-----------|--------|
 | [system-architecture.md](./03-architecture/system-architecture.md) | Completo |
+| [reference-architecture.md](./03-architecture/reference-architecture.md) | Propuesta (revisión senior, hallazgos y ADR-011…018) |
 | [architecture-decisions.md](./03-architecture/architecture-decisions.md) | Completo |
 | [backend-architecture.md](./03-architecture/backend-architecture.md) | Completo |
 | [frontend-architecture.md](./03-architecture/frontend-architecture.md) | Completo |
