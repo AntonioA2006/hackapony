@@ -1,20 +1,27 @@
 /** @type {import('tailwindcss').Config} */
-// Tokens del sistema de diseño (docs de referencia: lienzo de piedra cálido + un único acento cian).
+// Estructura del sistema de referencia (bordes finos, tipografía ligera) con paleta propia del proyecto.
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
-        canvas: "#fafaf9",
+        // Paleta "agua": lienzo frío claro, azul profundo para texto, un azul de acción y colores con significado.
+        canvas: "#f5f9fc",
         card: "#ffffff",
-        line: "#e8e6e5",
-        muted: "#d6d3d1",
-        ash: "#a8a29e",
-        warm: "#78716c",
-        ink: "#0c0a09",
-        soot: "#1c1917",
-        sky: "#c1e1f7",
-        cyan: { DEFAULT: "#3ba6f1", edge: "#3398e1" },
+        line: "#e1e8ef",
+        muted: "#c9d5e0",
+        ash: "#94a3b4",
+        warm: "#556678", // texto secundario (pizarra)
+        ink: "#0b2338", // azul marino casi negro
+        soot: "#12324f", // superficies oscuras / botón secundario
+        sky: "#d6ecf8", // fondo del resaltado
+        cyan: { DEFAULT: "#0b84c6", edge: "#086c9f" }, // azul agua: acción principal y enlaces
+        // Semánticos (prioridad / estado)
+        critical: "#d9483b",
+        high: "#ee8a2e",
+        medium: "#e9b230",
+        low: "#7fa3bf",
+        ok: "#1e9e78",
       },
       fontFamily: {
         display: ['"Inter Tight Variable"', '"Inter Tight"', "ui-sans-serif", "system-ui", "sans-serif"],

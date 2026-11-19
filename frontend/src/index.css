@@ -31,7 +31,10 @@
     @apply rounded bg-sky px-2 py-0.5 text-cyan-edge;
   }
   .field {
-    @apply w-full rounded-input border border-muted bg-card px-3 py-2 text-body text-ink placeholder:text-warm focus:border-cyan focus:outline-none focus:ring-2 focus:ring-cyan/40;
+    @apply w-full rounded-input border border-muted bg-card px-3 py-2 text-body text-ink placeholder:text-ash focus:border-cyan focus:outline-none focus:ring-2 focus:ring-cyan/30 disabled:bg-canvas disabled:text-ash;
+  }
+  .field[aria-invalid="true"] {
+    @apply border-critical focus:border-critical focus:ring-critical/25;
   }
   .label {
     @apply mb-1 block text-[13px] font-medium text-ink;
@@ -44,15 +47,15 @@
 /* Leaflet con la tipografía y los tonos del sistema */
 .leaflet-container {
   font-family: inherit;
-  background: #f2f0ee;
+  background: #eef3f7;
 }
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
   border-radius: 10px;
   box-shadow: rgba(0, 0, 0, 0.05) 0px 4px 16px 0px;
-  border: 1px solid #e8e6e5;
+  border: 1px solid #e1e8ef;
 }
 .leaflet-control-attribution {
   font-size: 10px;
-  color: #78716c;
+  color: #556678;
 }

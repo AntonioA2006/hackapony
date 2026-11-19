@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../shared/api/client";
-import { CATEGORY_LABELS, REPORT_STATUS_LABELS, label } from "../shared/labels";
+import { CATEGORY_LABELS, label } from "../shared/labels";
 import QueryError from "../shared/ui/QueryError";
-import { ButtonLink, PageHeader, Spinner, Tag } from "../shared/ui";
+import { ButtonLink, PageHeader, Spinner, StatusTag } from "../shared/ui";
 
 type Report = {
   id: string;
@@ -41,9 +41,7 @@ export default function MyReportsPage() {
                   {r.incident_id ? " · agrupado en una incidencia" : ""}
                 </p>
               </div>
-              <Tag tone={r.status === "resolved" ? "accent" : r.status === "rejected" ? "dark" : "neutral"}>
-                {label(REPORT_STATUS_LABELS, r.status)}
-              </Tag>
+              <StatusTag status={r.status} />
             </li>
           ))}
           {!data.items.length && <li className="px-5 py-8 text-center text-warm">Aún no has enviado reportes.</li>}

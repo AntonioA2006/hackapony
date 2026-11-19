@@ -19,7 +19,7 @@ from app.services.grouping import nearby_public_suggestions, process_report_grou
 from app.services.photo_retention import purge_report_photos
 from app.services.photo_sanitize import sanitize_photo
 from app.services.notifications import notify_user
-from app.services.spatial import point_wkt
+from app.services.spatial import point_in_mexico, point_wkt
 from app.utils.ids import new_public_id
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -63,6 +63,8 @@ def create_report(
 ):
     check_rate_limit(f"report:{user.id}", max_calls=10, window_seconds=3600)
     check_rate_limit(f"report-ip:{request.client.host if request.client else 'unknown'}", max_calls=30, window_seconds=3600)
+    if not point_in_mexico(db, payload.latitude, payload.longitude):
+        raise HTTPException(422, detail="La ubicación debe estar dentro de México.")
     suggestions_raw = nearby_public_suggestions(db, payload.latitude, payload.longitude, payload.category)
     suggestions = [
         {

@@ -5,12 +5,12 @@ import { apiFetch } from "../shared/api/client";
 import { useAuth } from "../shared/auth/AuthContext";
 import { BAND_LABELS, CATEGORY_LABELS, fmtInt, fmtPct, label } from "../shared/labels";
 import IncidentsMap, { MEXICO_BOUNDS, type MapIncident } from "../shared/map/IncidentsMap";
-import { WATER_LEGEND } from "../shared/map/waterScale";
+import { BAND_COLORS, WATER_LEGEND } from "../shared/map/waterScale";
 import { useMunicipalities, useMunicipalitiesGeo, useStates, useStatesGeo, type Water } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
 import { LocationPrompt, RegionSelect } from "../shared/region/RegionPicker";
 import QueryError from "../shared/ui/QueryError";
-import { ButtonLink, Notice, PageHeader, Tag } from "../shared/ui";
+import { ButtonLink, Notice, PageHeader, PriorityTag, Tag } from "../shared/ui";
 
 type Paginated<T> = { items: T[]; total: number };
 
@@ -62,8 +62,8 @@ function Legend() {
         {(["low", "medium", "high", "critical"] as const).map((b, i) => (
           <li key={b} className="flex items-center gap-1.5">
             <span
-              className="rounded-full bg-soot"
-              style={{ width: 8 + i * 4, height: 8 + i * 4, boxShadow: b === "critical" ? "0 0 0 2px #3ba6f1" : "0 0 0 2px #fff" }}
+              className="rounded-full"
+              style={{ width: 8 + i * 3, height: 8 + i * 3, background: BAND_COLORS[b], boxShadow: "0 0 0 2px #fff, 0 0 0 3px #e1e8ef" }}
             />
             {BAND_LABELS[b]}
           </li>
@@ -186,9 +186,7 @@ export default function MapPage() {
               <li key={inc.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span className="font-mono text-[12px] text-warm">{inc.public_id}</span>
                 <span className="text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</span>
-                <Tag tone={inc.priority_band === "critical" ? "dark" : "neutral"}>
-                  Prioridad {label(BAND_LABELS, inc.priority_band).toLowerCase()}
-                </Tag>
+                <PriorityTag band={inc.priority_band} />
                 <span className="text-[12px] text-warm">
                   {inc.report_count} reporte(s) · {inc.confirmation_count} confirmación(es)
                 </span>

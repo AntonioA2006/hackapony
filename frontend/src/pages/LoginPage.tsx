@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/auth/AuthContext";
 import { authErrorMessage } from "../shared/firebase";
 import { Button, Field, Notice } from "../shared/ui";
+import { fieldA11y, validateEmail } from "../shared/validation";
 import AuthLayout from "./AuthLayout";
 
 export default function LoginPage() {
@@ -15,6 +16,11 @@ export default function LoginPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const emailErr = validateEmail(email);
+    if (emailErr || !password) {
+      setError(emailErr ?? "Escribe tu contraseña.");
+      return;
+    }
     setError("");
     setBusy(true);
     try {
@@ -40,13 +46,13 @@ export default function LoginPage() {
         </>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {error && <Notice tone="error">{error}</Notice>}
-        <Field label="Correo electrónico">
-          <input className="field" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Field label="Correo electrónico" htmlFor="login-email">
+          <input className="field" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required {...fieldA11y("login-email")} />
         </Field>
-        <Field label="Contraseña">
-          <input className="field" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <Field label="Contraseña" htmlFor="login-pass">
+          <input className="field" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required {...fieldA11y("login-pass")} />
         </Field>
         <div className="flex items-center justify-between gap-3">
           <Link to="/recuperar" className="text-[13px] text-warm hover:text-ink">

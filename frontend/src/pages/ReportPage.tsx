@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, authHeader, getApiBase } from "../shared/api/client";
 import { CATEGORY_LABELS, SEVERITY_LABELS } from "../shared/labels";
 import IncidentsMap from "../shared/map/IncidentsMap";
-import { useMunicipalities, useStates } from "../shared/region/api";
+import { isInsideMexico, useMexicoOutline, useMunicipalities, useStates } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
 import { Button, Field, Notice, PageHeader } from "../shared/ui";
+import { fieldA11y, PHOTO_MAX_COUNT, validateLength, validatePhotos } from "../shared/validation";
 
 type Created = { id: string; public_id: string; incident_id: string | null; nearby_suggestions?: { public_id: string; distance_m: number }[] };
 type Located = { state: { name: string }; municipality: { name: string } | null };
@@ -32,6 +33,10 @@ export default function ReportPage() {
   const [error, setError] = useState("");
   const [created, setCreated] = useState<Created | null>(null);
   const [photoWarn, setPhotoWarn] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const outline = useMexicoOutline();
+  const previews = useMemo(() => photos.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })), [photos]);
+  useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), [previews]);
 
   const center = point ?? munCenter ?? stateCenter ?? DEFAULT_CENTER;
   const zoom = point ? 16 : munCenter ? 12 : stateCenter ? 8 : 11;
@@ -41,6 +46,26 @@ export default function ReportPage() {
     enabled: Boolean(point),
     retry: false,
   });
+
+  const inside = point ? isInsideMexico(outline.data, point[0], point[1]) : null;
+  const errors = {
+    title: validateLength(title, 5, 120, "Título"),
+    description: validateLength(description, 10, 2000, "Descripción"),
+    address: address.trim().length > 200 ? "Referencia: máximo 200 caracteres." : undefined,
+    photos: validatePhotos(photos),
+    point: !point
+      ? "Marca en el mapa el lugar del problema o usa tu ubicación."
+      : inside === false || located.isError
+        ? "Ese punto está fuera de México. Agua Alerta solo recibe reportes en territorio nacional."
+        : undefined,
+  };
+  const show = (k: keyof typeof errors) => (submitted ? errors[k] : undefined);
+
+  const addPhotos = (list: FileList | null) => {
+    const next = [...photos, ...Array.from(list ?? [])];
+    setPhotos(next.slice(0, PHOTO_MAX_COUNT));
+    if (next.length > PHOTO_MAX_COUNT) setPhotoWarn(`Solo se conservaron las primeras ${PHOTO_MAX_COUNT} fotografías.`);
+  };
 
   const useGps = () => {
     setError("");
@@ -53,10 +78,12 @@ export default function ReportPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!point) {
-      setError("Marca en el mapa el lugar del problema o usa tu ubicación.");
+    setSubmitted(true);
+    if (Object.values(errors).some(Boolean)) {
+      setError("Revisa los campos marcados antes de enviar.");
       return;
     }
+    if (!point) return;
     setBusy(true);
     setError("");
     setPhotoWarn("");
@@ -129,7 +156,7 @@ export default function ReportPage() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-8">
+    <form onSubmit={onSubmit} className="space-y-8" noValidate>
       <PageHeader
         title={
           <>
@@ -165,23 +192,51 @@ export default function ReportPage() {
               ))}
             </div>
           </fieldset>
-          <Field label="Título" hint="Ejemplo: Fuga constante frente al mercado">
-            <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} required minLength={5} maxLength={120} />
+          <Field label="Título" hint="Ejemplo: Fuga constante frente al mercado" error={show("title")} htmlFor="rep-title" aside={`${title.trim().length}/120`}>
+            <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} {...fieldA11y("rep-title", show("title"))} />
           </Field>
-          <Field label="Descripción" hint="Desde cuándo ocurre, cuánta agua sale, si afecta el paso.">
-            <textarea className="field" value={description} onChange={(e) => setDescription(e.target.value)} required minLength={10} rows={4} />
+          <Field label="Descripción" hint="Desde cuándo ocurre, cuánta agua sale, si afecta el paso." error={show("description")} htmlFor="rep-desc" aside={`${description.trim().length}/2000`}>
+            <textarea className="field" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} rows={4} {...fieldA11y("rep-desc", show("description"))} />
           </Field>
-          <Field label="Referencia del lugar (opcional)">
-            <input className="field" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, número, entre calles" />
+          <Field label="Referencia del lugar (opcional)" error={show("address")} htmlFor="rep-addr">
+            <input className="field" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="Calle, número, entre calles" {...fieldA11y("rep-addr", show("address"))} />
           </Field>
-          <Field label="Fotografías (opcional, hasta 5)" hint="JPEG, PNG o WebP de hasta 5 MB. Les quitamos los metadatos (incluida la ubicación) y se eliminan al cerrar el caso.">
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              className="block w-full text-[13px] text-warm file:mr-3 file:rounded-full file:border file:border-line file:bg-card file:px-3 file:py-1.5 file:text-ink"
-              onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 5))}
-            />
+          <Field
+            label={`Fotografías (opcional, hasta ${PHOTO_MAX_COUNT})`}
+            hint="JPEG, PNG o WebP de hasta 5 MB. Les quitamos los metadatos (incluida la ubicación) y se eliminan al cerrar el caso."
+            error={errors.photos}
+            htmlFor="rep-photos"
+          >
+            {previews.length > 0 && (
+              <ul className="mb-2 grid grid-cols-5 gap-2">
+                {previews.map((p, i) => (
+                  <li key={p.url} className="group relative aspect-square overflow-hidden rounded-input border border-line bg-canvas">
+                    <img src={p.url} alt={`Foto ${i + 1}: ${p.name}`} className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                      className="absolute right-1 top-1 rounded-full bg-ink/70 px-1.5 text-[12px] leading-5 text-white"
+                      aria-label={`Quitar ${p.name}`}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {photos.length < PHOTO_MAX_COUNT && (
+              <input
+                id="rep-photos"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="block w-full text-[13px] text-warm file:mr-3 file:rounded-full file:border file:border-line file:bg-card file:px-3 file:py-1.5 file:text-ink"
+                onChange={(e) => {
+                  addPhotos(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            )}
           </Field>
           {error && <Notice tone="error">{error}</Notice>}
           <Button type="submit" variant="primary" disabled={busy} className="w-full sm:w-auto">
@@ -210,6 +265,7 @@ export default function ReportPage() {
             </p>
           </div>
           <IncidentsMap center={center} zoom={zoom} pin={point} pickMode onPick={(la, lo) => setPoint([la, lo])} className="h-[520px]" />
+          {show("point") && <p className="text-[12px] text-critical" role="alert">{errors.point}</p>}
           {point && (
             <p className="font-mono text-[12px] text-ash">
               {point[0].toFixed(5)}, {point[1].toFixed(5)}

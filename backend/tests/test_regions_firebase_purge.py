@@ -241,3 +241,44 @@ def test_closing_incident_deletes_its_photos(client, tmp_path, monkeypatch):
             assert db.get(Report, uuid.UUID(report_id)) is not None
     finally:
         storage.get_storage.cache_clear()
+
+
+# ---------------------------------------------------------------- validaciones de reporte
+
+
+@pytest.mark.parametrize(
+    "lat,lon,code",
+    [(40.7, -74.0, 422), (24.0, -92.0, 422)],  # Nueva York (fuera del rango) y Golfo de México (fuera del polígono)
+    ids=["fuera-de-rango", "mar-fuera-de-poligono"],
+)
+@needs_regions
+def test_report_outside_mexico_rejected(client, lat, lon, code):
+    token = _user_token(UserRole.CIUDADANO)
+    res = client.post(
+        "/api/v1/reports",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Fuga fuera",
+            "description": "Descripción suficientemente larga",
+            "category": "leak_public_road",
+            "latitude": lat,
+            "longitude": lon,
+        },
+    )
+    assert res.status_code == code, res.text
+
+
+def test_report_blank_text_rejected(client):
+    token = _user_token(UserRole.CIUDADANO)
+    res = client.post(
+        "/api/v1/reports",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "      ",
+            "description": "          ",
+            "category": "leak_public_road",
+            "latitude": 19.43,
+            "longitude": -99.13,
+        },
+    )
+    assert res.status_code == 422

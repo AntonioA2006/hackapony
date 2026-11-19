@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from "geojson";
 import { apiFetch } from "../api/client";
 
 export type Water = {
@@ -68,4 +68,28 @@ export function useMunicipalitiesGeo(cveEnt: string | null) {
     enabled: Boolean(cveEnt),
     staleTime: DAY,
   });
+}
+
+export function useMexicoOutline() {
+  return useQuery({
+    queryKey: ["regions", "mexico"],
+    queryFn: () => apiFetch<Feature<Polygon | MultiPolygon>>("/regions/mexico.geojson"),
+    staleTime: DAY,
+  });
+}
+
+/** Punto-en-polígono (ray casting) sobre el contorno nacional: valida en el navegador que el punto esté en México. */
+export function isInsideMexico(outline: Feature<Polygon | MultiPolygon> | undefined, lat: number, lon: number): boolean | null {
+  if (!outline) return null;
+  const polys = outline.geometry.type === "Polygon" ? [outline.geometry.coordinates] : outline.geometry.coordinates;
+  const inRing = (ring: number[][]) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+  return polys.some((rings) => inRing(rings[0]) && !rings.slice(1).some(inRing));
 }

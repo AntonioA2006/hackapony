@@ -14,6 +14,7 @@ from app.core.rate_limit import check_rate_limit
 
 router = APIRouter(prefix="/regions", tags=["regions"])
 
+_MEXICO_OUTLINE: str | None = None  # la unión de estados se calcula una vez por proceso (~1 s)
 _STATIC_CACHE = "public, max-age=86400, stale-while-revalidate=604800"
 _SOURCE = {
     "geometries": "INEGI. Marco Geoestadístico, diciembre de 2025 (wscatgeo)",
@@ -146,6 +147,25 @@ def states_geojson(
         """,
         {"tol": tolerance},
     )
+
+
+@router.get("/mexico.geojson")
+def mexico_outline(response: Response, db: Session = Depends(get_db)):
+    """Contorno nacional (unión de las 32 entidades) para enmascarar lo que está fuera de México."""
+    global _MEXICO_OUTLINE
+    if _MEXICO_OUTLINE is None:
+        _MEXICO_OUTLINE = db.execute(
+            text("SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Union(geom), 0.01), 3) FROM states")
+        ).scalar()
+    geometry = _MEXICO_OUTLINE
+    if not geometry:
+        raise HTTPException(404, detail="Territorio no cargado")
+    response.headers["Cache-Control"] = _STATIC_CACHE
+    return {
+        "type": "Feature",
+        "properties": {"name": "México", "source": _SOURCE["geometries"]},
+        "geometry": json.loads(geometry),
+    }
 
 
 @router.get("/states/{cve_ent}/municipalities.geojson")

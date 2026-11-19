@@ -28,7 +28,7 @@ M = 1 / 111_320
 
 def _random_point() -> tuple[float, float]:
     """Punto aleatorio en zona vacía para aislar cada prueba de datos previos."""
-    return random.uniform(17.0, 21.0), random.uniform(-104.0, -97.0)
+    return random.uniform(19.3, 21.0), random.uniform(-102.5, -98.6)  # centro del país, tierra firme
 
 
 def _make_user(role: UserRole = UserRole.CIUDADANO) -> str:

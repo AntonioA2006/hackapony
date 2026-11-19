@@ -1,8 +1,13 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.enums import LeakSeverity, ReportCategory, ReportStatus
+
+
+# Rectángulo que contiene a México (incluye islas); el polígono exacto se valida en el servicio.
+MX_LAT = (14.0, 33.5)
+MX_LON = (-118.5, -86.5)
 
 
 class ReportCreate(BaseModel):
@@ -10,10 +15,32 @@ class ReportCreate(BaseModel):
     description: str = Field(min_length=10, max_length=2000)
     category: ReportCategory
     severity: LeakSeverity = LeakSeverity.medium
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
+    latitude: float = Field(ge=MX_LAT[0], le=MX_LAT[1], description="Solo dentro de México")
+    longitude: float = Field(ge=MX_LON[0], le=MX_LON[1], description="Solo dentro de México")
     address_reference: str | None = Field(default=None, max_length=500)
     reported_at: datetime | None = None
+
+    @field_validator("title", "description", "address_reference", mode="before")
+    @classmethod
+    def _clean_text(cls, v):
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            raise ValueError("Debe ser texto")
+        v = " ".join(v.split())  # colapsa espacios y saltos repetidos
+        return v or None
+
+    @field_validator("reported_at")
+    @classmethod
+    def _not_in_future(cls, v: datetime | None):
+        if v is None:
+            return v
+        now = datetime.now(v.tzinfo or UTC)
+        if v > now + timedelta(minutes=5):
+            raise ValueError("La fecha del reporte no puede estar en el futuro")
+        if v < now - timedelta(days=365):
+            raise ValueError("La fecha del reporte es demasiado antigua")
+        return v
 
 
 class NearbySuggestion(BaseModel):

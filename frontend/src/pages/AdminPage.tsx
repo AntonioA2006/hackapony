@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { apiFetch } from "../shared/api/client";
 import { useAuth } from "../shared/auth/AuthContext";
-import { BAND_LABELS, CATEGORY_LABELS, INCIDENT_STATUS_LABELS, label } from "../shared/labels";
+import { CATEGORY_LABELS, INCIDENT_STATUS_LABELS, label } from "../shared/labels";
 import QueryError from "../shared/ui/QueryError";
-import { Button, Card, Notice, PageHeader, Stat, Tag } from "../shared/ui";
+import { Button, Card, Notice, PageHeader, PriorityTag, Stat } from "../shared/ui";
 
 type Incident = {
   id: string;
@@ -163,7 +163,7 @@ export default function AdminPage() {
                   <td className="px-4 py-3">{label(CATEGORY_LABELS, i.primary_category)}</td>
                   <td className="px-4 py-3">
                     <span className="tabular-nums">{Number(i.urgency_score).toFixed(1)}</span>{" "}
-                    <Tag tone={i.priority_band === "critical" ? "dark" : "neutral"}>{label(BAND_LABELS, i.priority_band)}</Tag>
+                    <PriorityTag band={i.priority_band} />
                   </td>
                   <td className="px-4 py-3">{label(INCIDENT_STATUS_LABELS, i.status)}</td>
                   <td className="px-4 py-3 tabular-nums">

@@ -8,6 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import MapPage from "./pages/MapPage";
 import RegisterPage from "./pages/RegisterPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import LocationConsentDialog from "./shared/region/LocationConsentDialog";
 
 // El panel administrativo va en un bundle aparte: el ciudadano no lo descarga.
 const AdminPage = lazy(() => import("./pages/AdminPage"));
@@ -20,8 +21,8 @@ function Logo() {
   return (
     <Link to="/" className="flex items-center gap-2 text-body font-medium text-ink">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path d="M12 2.5c3.6 4.4 6.5 8 6.5 11.5a6.5 6.5 0 1 1-13 0C5.5 10.5 8.4 6.9 12 2.5Z" fill="#0c0a09" />
-        <path d="M9 14.5a3 3 0 0 0 3 3" stroke="#3ba6f1" strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M12 2.5c3.6 4.4 6.5 8 6.5 11.5a6.5 6.5 0 1 1-13 0C5.5 10.5 8.4 6.9 12 2.5Z" fill="#0b84c6" />
+        <path d="M9 14.5a3 3 0 0 0 3 3" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
       Agua Alerta
     </Link>
@@ -129,6 +130,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         )}
       </header>
       <main className="mx-auto w-full max-w-page flex-1 px-4 py-10 sm:px-6">{children}</main>
+      <LocationConsentDialog />
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-page flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-warm sm:px-6">
           <p>Agua Alerta · Reportes ciudadanos de fugas y problemas de agua potable.</p>

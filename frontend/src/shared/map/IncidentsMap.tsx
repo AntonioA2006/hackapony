@@ -1,10 +1,10 @@
 import L, { type LatLngBoundsExpression, type PathOptions } from "leaflet";
 import type { Feature, Geometry } from "geojson";
 import { useEffect, useMemo } from "react";
-import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { BAND_LABELS, CATEGORY_LABELS, fmtPct, label } from "../labels";
-import type { RegionFeatureCollection, Water } from "../region/api";
-import { BAND_RADIUS, waterColor } from "./waterScale";
+import { useMexicoOutline, type RegionFeatureCollection, type Water } from "../region/api";
+import { BAND_COLORS, BAND_RADIUS, waterColor } from "./waterScale";
 
 export type MapIncident = {
   id: string;
@@ -31,6 +31,38 @@ export const MEXICO_BOUNDS: LatLngBoundsExpression = [
   [14.4, -118.6],
   [32.8, -86.6],
 ];
+// Margen para poder desplazarse un poco más allá de la frontera sin salir de la región
+const MAX_BOUNDS: LatLngBoundsExpression = [
+  [11.5, -122.5],
+  [35.5, -83.0],
+];
+const WORLD_RING: [number, number][] = [
+  [-89, -179.9],
+  [89, -179.9],
+  [89, 179.9],
+  [-89, 179.9],
+];
+
+/** Sombrea todo lo que está fuera de México: la plataforma solo opera en territorio nacional. */
+function OutsideMexicoMask() {
+  const outline = useMexicoOutline();
+  const rings = useMemo(() => {
+    const g = outline.data?.geometry;
+    if (!g) return null;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    const holes = polys.map((p) => p[0].map(([lon, lat]) => [lat, lon] as [number, number]));
+    return [WORLD_RING, ...holes];
+  }, [outline.data]);
+  if (!rings) return null;
+  return (
+    <Polygon
+      positions={rings}
+      pane="mask"
+      interactive={false}
+      pathOptions={{ stroke: true, color: "#9fb4c7", weight: 1, fillColor: "#f5f9fc", fillOpacity: 0.88 }}
+    />
+  );
+}
 
 type Props = {
   incidents?: MapIncident[];
@@ -79,7 +111,7 @@ const pinIcon = L.divIcon({
   className: "",
   iconSize: [22, 22],
   iconAnchor: [11, 11],
-  html: '<div style="width:22px;height:22px;border-radius:9999px;background:#3ba6f1;border:3px solid #fff;box-shadow:rgba(0,0,0,.25) 0 2px 6px"></div>',
+  html: '<div style="width:22px;height:22px;border-radius:9999px;background:#0b84c6;border:3px solid #fff;box-shadow:rgba(0,0,0,.25) 0 2px 6px"></div>',
 });
 
 export default function IncidentsMap({
@@ -106,7 +138,7 @@ export default function IncidentsMap({
     return {
       fillColor: waterColor(feature?.properties.water?.pct_sin_agua_entubada),
       fillOpacity: 0.72,
-      color: selected ? "#0c0a09" : "#ffffff",
+      color: selected ? "#0b2338" : "#ffffff",
       weight: selected ? 2 : 0.8,
     };
   };
@@ -118,9 +150,14 @@ export default function IncidentsMap({
       zoom={center ? zoom : undefined}
       className={`w-full overflow-hidden rounded-card border border-line ${className}`}
       scrollWheelZoom
+      maxBounds={MAX_BOUNDS}
+      maxBoundsViscosity={0.9}
+      minZoom={4}
     >
       <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} maxZoom={16} />
+      <Pane name="mask" style={{ zIndex: 340 }} />
       <Pane name="regions" style={{ zIndex: 350 }} />
+      <OutsideMexicoMask />
       <FitBounds bounds={bounds} />
       {regions && (
         <GeoJSON
@@ -144,10 +181,10 @@ export default function IncidentsMap({
           center={[inc.latitude, inc.longitude]}
           radius={BAND_RADIUS[inc.priority_band] ?? 6}
           pathOptions={{
-            color: inc.priority_band === "critical" ? "#3ba6f1" : "#ffffff",
-            weight: inc.priority_band === "critical" ? 3 : 2,
-            fillColor: "#1c1917",
-            fillOpacity: 0.92,
+            color: "#ffffff",
+            weight: 2,
+            fillColor: BAND_COLORS[inc.priority_band] ?? "#7fa3bf",
+            fillOpacity: 0.95,
           }}
         >
           <Popup>

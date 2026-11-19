@@ -2,24 +2,10 @@ import { Button, Notice } from "../ui";
 import { useMunicipalities, useStates } from "./api";
 import { useRegion } from "./RegionContext";
 
-/** Aviso de ubicación (solo si no se ha decidido) + selectores Estado / Municipio. */
+/** Muestra errores de ubicación; el permiso se pide en LocationConsentDialog (primera visita). */
 export function LocationPrompt() {
-  const { consent, region, locating, locateError, useMyLocation, declineLocation } = useRegion();
-  if (consent !== "unset" || region.cve_ent) return locateError ? <Notice tone="error">{locateError}</Notice> : null;
-  return (
-    <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-card px-4 py-3 shadow-subtle">
-      <p className="mr-auto max-w-xl text-body text-warm">
-        <span className="font-medium text-ink">¿Te mostramos tu estado y municipio?</span> Usamos tu ubicación una sola vez para
-        identificar la región; no guardamos tus coordenadas, solo la región elegida en una cookie.
-      </p>
-      <Button variant="primary" onClick={() => void useMyLocation()} disabled={locating}>
-        {locating ? "Ubicando…" : "Usar mi ubicación"}
-      </Button>
-      <Button variant="ghost" onClick={declineLocation}>
-        Elegir manualmente
-      </Button>
-    </div>
-  );
+  const { locateError } = useRegion();
+  return locateError ? <Notice tone="error">{locateError}</Notice> : null;
 }
 
 export function RegionSelect({ compact = false }: { compact?: boolean }) {
