@@ -1,6 +1,3 @@
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/inter-tight";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -165,6 +162,25 @@
 
 .aa-fab { animation: aa-fab-pulse 2.2s ease-out infinite; }
 .aa-fab:hover, .aa-fab:focus-visible, .aa-fab[data-open="true"] { animation: none; }
+.aa-fab-reveal {
+  display: grid;
+  grid-template-columns: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-columns 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.45s ease 0.08s;
+}
+.aa-fab:hover .aa-fab-reveal,
+.aa-fab:focus-visible .aa-fab-reveal,
+.aa-fab[data-open="true"] .aa-fab-reveal {
+  grid-template-columns: 1fr;
+  opacity: 1;
+}
+.aa-fab[data-dragging="true"] .aa-fab-reveal {
+  grid-template-columns: 0fr;
+  opacity: 0;
+  transition-duration: 0.15s;
+}
 
 .aa-focus-pin {
   width: 22px; height: 22px; border-radius: 9999px; background: #1479e8; border: 3px solid #fff;

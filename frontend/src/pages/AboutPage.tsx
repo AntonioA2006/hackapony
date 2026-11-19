@@ -19,13 +19,13 @@ export default function AboutPage() {
   return (
     <div className="space-y-16">
       <section className="max-w-3xl pt-2">
-        <p className="text-[13px] font-medium tracking-wide text-cyan">Morelia · Michoacán</p>
+        <p className="text-[13px] font-medium tracking-wide text-cyan">Agua Alerta</p>
         <h1 className="mt-3 text-[36px] font-medium leading-[1.08] tracking-[-0.03em] text-ink sm:text-display">
-          Somos una startup <span className="highlight">michoacana</span>
+          Sobre <span className="highlight">nosotros</span>
         </h1>
         <p className="mt-5 text-body-lg text-warm">
-          Agua Alerta nació en Michoacán para que una fuga deje de ser un rumor de colonia y se convierta en un caso con
-          folio, prioridad y seguimiento. Construimos software para ciudadanos, operadores y cuadrillas del agua.
+          Conectamos a quien reporta una fuga con quien la valida y con la cuadrilla que la repara. Cada caso tiene folio,
+          prioridad y un cierre que se confirma.
         </p>
       </section>
 
@@ -60,8 +60,8 @@ export default function AboutPage() {
         <div className="space-y-3 text-body text-warm">
           <h3 className="text-subheading text-ink">1. Quiénes somos</h3>
           <p>
-            Agua Alerta es una startup con origen en Michoacán, México. Operamos esta plataforma para recibir y dar
-            seguimiento a reportes ciudadanos de fugas y problemas de agua potable.
+            Agua Alerta opera esta plataforma para recibir y dar seguimiento a reportes ciudadanos de fugas y problemas
+            de agua potable.
           </p>
           <h3 className="text-subheading text-ink">2. Qué datos pedimos</h3>
           <p>

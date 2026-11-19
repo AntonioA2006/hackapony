@@ -9,6 +9,7 @@ import AuthImage from "../../shared/staff/AuthImage";
 import type { IncidentDetail } from "../../shared/staff/api";
 import QueryError from "../../shared/ui/QueryError";
 import { Button, Card, Notice, PriorityTag, Skeleton } from "../../shared/ui";
+import PhotoCapture from "../../shared/ui/PhotoCapture";
 
 export default function CrewOrderPage() {
   const { id } = useParams();
@@ -151,16 +152,10 @@ export default function CrewOrderPage() {
         <Card>
           <h2 className="text-subheading">Dar por resuelta</h2>
           <p className="mt-1 text-body text-warm">Foto de la reparación, qué se hizo y cuánto tiempo tomó. Eso se envía al operador. Quien reportó no ve la foto.</p>
-          <label className="mt-4 block">
-            <span className="label">Foto de cómo quedó</span>
-            <input
-              className="field"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
-              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            />
-          </label>
+          <div className="mt-4">
+            <p className="label">Foto de cómo quedó</p>
+            <PhotoCapture id="cierre-foto" files={photo ? [photo] : []} max={1} onChange={(files) => setPhoto(files[0] ?? null)} />
+          </div>
           <label className="mt-3 block">
             <span className="label">Cómo se resolvió</span>
             <textarea className="field min-h-24" value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder="Qué se reparó y con qué" />

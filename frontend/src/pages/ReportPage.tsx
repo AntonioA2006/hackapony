@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import CallButtons from "../shared/CallButtons";
 import { useAuth } from "../shared/auth/AuthContext";
@@ -9,6 +9,7 @@ import IncidentsMap from "../shared/map/IncidentsMap";
 import { isInsideMexico, useMexicoOutline, useMunicipalities, useStates } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
 import { Button, Field, Notice, PageHeader } from "../shared/ui";
+import PhotoCapture from "../shared/ui/PhotoCapture";
 import { GeoError, MAX_REPORT_DISTANCE_M, getBrowserPosition, metersBetween, parseCoordinate, reverseGeocode, searchAddress, type AddressResult } from "../shared/geo";
 import { fieldA11y, PHOTO_MAX_COUNT, validateLength, validatePhotos } from "../shared/validation";
 
@@ -123,12 +124,8 @@ export default function ReportPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<Created | null>(null);
-  const [photoWarn, setPhotoWarn] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const outline = useMexicoOutline();
-  const previews = useMemo(() => photos.map((f) => ({ name: f.name, url: URL.createObjectURL(f) })), [photos]);
-  useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), [previews]);
-
   const center = point ?? munCenter ?? stateCenter ?? DEFAULT_CENTER;
   const zoom = point ? 16 : munCenter ? 12 : stateCenter ? 8 : 11;
   const located = useQuery({
@@ -156,12 +153,6 @@ export default function ReportPage() {
             : undefined,
   };
   const show = (k: keyof typeof errors) => (submitted ? errors[k] : undefined);
-
-  const addPhotos = (list: FileList | null) => {
-    const next = [...photos, ...Array.from(list ?? [])];
-    setPhotos(next.slice(0, PHOTO_MAX_COUNT));
-    if (next.length > PHOTO_MAX_COUNT) setPhotoWarn(`Solo se conservaron las primeras ${PHOTO_MAX_COUNT} fotografías.`);
-  };
 
   const nearHere = (lat: number, lon: number, fix = here) =>
     Boolean(fix) && metersBetween(fix!.lat, fix!.lon, lat, lon) <= MAX_REPORT_DISTANCE_M;
@@ -263,7 +254,6 @@ export default function ReportPage() {
     if (!point) return;
     setBusy(true);
     setError("");
-    setPhotoWarn("");
     try {
       const pos = await getBrowserPosition();
       const fix = { lat: pos.lat, lon: pos.lon };
@@ -299,7 +289,7 @@ export default function ReportPage() {
         });
         if (!res.ok) failed += 1;
       }
-      if (failed) setPhotoWarn(`${failed} foto(s) no se pudieron subir (formato o tamaño no válido).`);
+      if (failed) setError(`${failed} foto(s) no se pudieron subir (formato o tamaño no válido).`);
       setCreated(report);
       void qc.invalidateQueries({ queryKey: ["active-report"] });
     } catch (err) {
@@ -351,7 +341,7 @@ export default function ReportPage() {
           }
           lead="Guardamos tu reporte. Te avisaremos cuando se valide y cuando cambie de estado."
         />
-        {photoWarn && <Notice tone="error">{photoWarn}</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
         {created.nearby_suggestions && created.nearby_suggestions.length > 0 && (
           <Notice>Había otros reportes cerca de ese punto; los agrupamos en la misma incidencia para priorizarla mejor.</Notice>
         )}
@@ -504,36 +494,7 @@ export default function ReportPage() {
             error={errors.photos}
             htmlFor="rep-photos"
           >
-            {previews.length > 0 && (
-              <ul className="mb-2 grid grid-cols-5 gap-2">
-                {previews.map((p, i) => (
-                  <li key={p.url} className="group relative aspect-square overflow-hidden rounded-input border border-line bg-canvas">
-                    <img src={p.url} alt={`Foto ${i + 1}: ${p.name}`} className="h-full w-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
-                      className="absolute right-1 top-1 rounded-full bg-ink/70 px-1.5 text-[12px] leading-5 text-white"
-                      aria-label={`Quitar ${p.name}`}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {photos.length < PHOTO_MAX_COUNT && (
-              <input
-                id="rep-photos"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                className="block w-full text-[13px] text-warm file:mr-3 file:rounded-full file:border file:border-line file:bg-card file:px-3 file:py-1.5 file:text-ink"
-                onChange={(e) => {
-                  addPhotos(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            )}
+            <PhotoCapture id="rep-photos" files={photos} multiple max={PHOTO_MAX_COUNT} onChange={setPhotos} />
           </Field>
           {error && <Notice tone="error">{error}</Notice>}
           <Button type="submit" variant="primary" disabled={busy} className="w-full sm:w-auto" aria-busy={busy}>

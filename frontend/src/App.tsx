@@ -163,12 +163,13 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <button
             type="button"
-            className="ml-auto inline-flex h-10 items-center rounded-full border border-line bg-card px-3 text-body lg:hidden"
+            className="ml-auto grid h-11 w-11 place-items-center rounded-full border border-[#e2e8f0] bg-white text-ink lg:hidden"
             aria-expanded={open}
             aria-controls="menu-movil"
+            aria-label={open ? "Cerrar menú" : "Abrir menú"}
             onClick={() => setOpen((v) => !v)}
           >
-            {open ? "Cerrar" : "Menú"}
+            <i className={`fa-solid ${open ? "fa-xmark" : "fa-bars"} text-[18px]`} aria-hidden />
           </button>
         </nav>
         {open && (
@@ -210,7 +211,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-page flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-warm sm:px-6">
           <p>
-            Agua Alerta · Startup michoacana ·{" "}
+            Agua Alerta ·{" "}
             <Link to="/nosotros" className="underline hover:text-ink">
               Sobre nosotros
             </Link>

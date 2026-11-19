@@ -21,27 +21,24 @@ type Overview = {
 
 function HeroMark() {
   return (
-    <svg viewBox="0 0 360 280" className="h-full w-full" role="img" aria-label="Esquema de mapa, tubería y reportes">
-      <rect width="360" height="280" rx="20" fill="#0b1f33" />
-      <g stroke="#1c3b58" strokeWidth="1">
-        {Array.from({ length: 8 }, (_, i) => (
-          <line key={`v${i}`} x1={40 + i * 40} y1="24" x2={40 + i * 40} y2="256" />
-        ))}
-        {Array.from({ length: 6 }, (_, i) => (
-          <line key={`h${i}`} x1="24" y1={36 + i * 40} x2="336" y2={36 + i * 40} />
-        ))}
+    <svg viewBox="0 0 520 360" className="h-full w-full" role="img" aria-label="Red de agua sobre un mapa de colonia, con un reporte en atención">
+      <rect width="520" height="360" fill="#f4f8fc" />
+      <path d="M0 78h520M0 156h520M0 234h520M0 312h520M96 0v360M198 0v360M310 0v360M422 0v360" stroke="#d5e2ee" strokeWidth="1" />
+      <path d="M28 214c70-8 96-62 168-58 74 4 92 70 168 62 48-6 78-28 128-18" fill="none" stroke="#1479e8" strokeWidth="8" strokeLinecap="round" />
+      <path d="M28 214c70-8 96-62 168-58 74 4 92 70 168 62 48-6 78-28 128-18" fill="none" stroke="#7ec8f8" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="196" cy="160" r="18" fill="#fff" stroke="#1479e8" strokeWidth="4" />
+      <path d="M196 148c6 8 10 14 10 20a10 10 0 1 1-20 0c0-6 4-12 10-20z" fill="#1479e8" />
+      <g transform="translate(286 46)">
+        <rect width="196" height="92" rx="16" fill="#fff" stroke="#e2e8f0" />
+        <circle cx="28" cy="32" r="10" fill="#14b8a6" />
+        <text x="48" y="28" fill="#526277" fontSize="12" fontFamily="Plus Jakarta Sans, sans-serif">Folio AA-2041</text>
+        <text x="48" y="48" fill="#142235" fontSize="16" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">Fuga en la red</text>
+        <text x="48" y="70" fill="#0e5fbe" fontSize="13" fontFamily="Plus Jakarta Sans, sans-serif">En atención</text>
       </g>
-      <path d="M48 168c40-8 52-48 92-48s48 36 88 28 48-40 84-24" fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" />
-      <path d="M48 196c36 10 60-20 96-12s52 28 84 12 40-28 84-8" fill="none" stroke="#14b8a6" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
-      <g>
-        <circle cx="140" cy="120" r="16" fill="#1479e8" />
-        <circle cx="228" cy="148" r="11" fill="#38bdf8" />
-        <circle cx="188" cy="196" r="8" fill="#14b8a6" />
-      </g>
-      <g transform="translate(248 48)">
-        <rect width="84" height="52" rx="10" fill="#142235" stroke="#1c3b58" />
-        <text x="12" y="22" fill="#8ea0b3" fontSize="9" fontFamily="Inter, sans-serif">Reporte</text>
-        <text x="12" y="38" fill="#f7fafc" fontSize="12" fontFamily="Inter, sans-serif">Validado</text>
+      <g transform="translate(36 250)">
+        <rect width="150" height="64" rx="14" fill="#0b1f33" />
+        <text x="16" y="28" fill="#8ea0b3" fontSize="12" fontFamily="Plus Jakarta Sans, sans-serif">Prioridad</text>
+        <text x="16" y="48" fill="#fff" fontSize="16" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">Alta</text>
       </g>
     </svg>
   );
@@ -92,7 +89,7 @@ export default function HomePage() {
             <ButtonLink to={user ? "/reportar" : "/registro"}>Reportar problema</ButtonLink>
           </div>
         </div>
-        <div className="surface-elevated h-[220px] overflow-hidden bg-[#0b1f33] sm:h-[280px]">
+        <div className="surface-elevated h-[240px] overflow-hidden sm:h-[320px]">
           <HeroMark />
         </div>
       </section>
@@ -163,9 +160,9 @@ export default function HomePage() {
       </section>
 
       <section className="surface-elevated p-8">
-        <h2 className="text-subheading">Una startup michoacana</h2>
+        <h2 className="text-subheading">Sobre nosotros</h2>
         <p className="mt-3 max-w-3xl text-body text-warm">
-          Agua Alerta se construye desde Michoacán para que una fuga tenga folio, prioridad y seguimiento hasta el cierre.
+          Agua Alerta da folio, prioridad y seguimiento a cada fuga, desde el reporte hasta el cierre confirmado.
         </p>
         <Link to="/nosotros" className="mt-4 inline-flex text-body font-medium text-cyan-edge hover:underline">
           Sobre nosotros y aviso legal
