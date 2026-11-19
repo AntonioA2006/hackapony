@@ -46,4 +46,4 @@ Todo cambio de estado en `incident_history` con `actor_user_id`, `payload`.
 
 ## Mapa público
 
-Solo incidencias con al menos un reporte `validated` o policy `open` tras recibir primer reporte (**decisión pendiente**: restringir a validadas para reducir fraude — recomendación MVP: mostrar tras `under_review` con badge "sin validar").
+El mapa público muestra la incidencia en cuanto tiene un reporte que no está `rejected`, con `awaiting_validation` si ninguno está `validated`. Un rechazo quita el punto si no queda otro reporte vigente.

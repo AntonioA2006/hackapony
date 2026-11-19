@@ -16,7 +16,7 @@
 | `page` | Default 1. Valores &lt; 1 se tratan como 1. |
 | `page_size` | Default 100. Se recorta a 1…200. Pedir 500 no es error: la respuesta trae `page_size: 200`. |
 
-El filtro espacial usa `public_location` (índice GiST), no el centroide. `latitude` / `longitude` son ese punto: snap a una malla de ~30 m más un desplazamiento estable derivado de HMAC(`LOCATION_HMAC_SECRET`, id). Ver [ADR-016](../13-decisions/adr-016-ubicacion-publica.md). Solo entran incidencias abiertas con al menos un reporte `validated`. Orden: urgencia descendente. `Cache-Control: public, max-age=30`.
+El filtro espacial usa `public_location` (índice GiST), no el centroide. `latitude` / `longitude` son ese punto: snap a una malla de ~30 m más un desplazamiento estable derivado de HMAC(`LOCATION_HMAC_SECRET`, id). Ver [ADR-016](../13-decisions/adr-016-ubicacion-publica.md). Entra toda incidencia abierta con al menos un reporte que no esté `rejected`: el reporte se ve en el mapa en cuanto se envía. `awaiting_validation` es verdadero si ninguno de esos reportes está `validated`. Orden: urgencia descendente. `Cache-Control: public, max-age=30`.
 
 **Response item**
 

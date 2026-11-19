@@ -17,6 +17,7 @@ export type MapIncident = {
   report_count: number;
   confirmation_count: number;
   primary_category: string;
+  awaiting_validation?: boolean;
 };
 
 export const MEXICO_BOUNDS: LatLngBoundsExpression = [
@@ -207,6 +208,7 @@ export default function IncidentsMap({
             <div className="space-y-1 text-[13px]">
               <p className="font-mono text-[12px] text-warm">{inc.public_id}</p>
               <p className="font-medium text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</p>
+              {inc.awaiting_validation && <p className="text-warm">Aún sin validar</p>}
               <p className="text-warm">
                 Prioridad {label(BAND_LABELS, inc.priority_band).toLowerCase()} · {inc.report_count} reporte(s) ·{" "}
                 {inc.confirmation_count} confirmación(es)

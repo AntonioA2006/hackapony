@@ -168,8 +168,8 @@ export default function MapPage() {
           />
           <p className="text-[12px] text-warm">
             {region.cve_ent ? "Toca un municipio para enfocarlo." : "Toca un estado para ver sus municipios."}{" "}
-            Solo se publican incidencias con al menos un reporte validado. La ubicación en el mapa está aproximada (~30 m)
-            para no mostrar el punto exacto del reporte.
+            Los reportes de fugas aparecen en cuanto se envían. Si un administrador todavía no los revisa, se marcan
+            como sin validar. La ubicación en el mapa está aproximada (~30 m) para no mostrar el punto exacto del reporte.
             {incidents.isFetching ? " Actualizando esta vista…" : ""}
           </p>
           {incidents.data && incidents.data.total > list.length && (
@@ -195,7 +195,7 @@ export default function MapPage() {
           </p>
         ) : list.length === 0 ? (
           <p className="rounded-card border border-dashed border-muted bg-card px-4 py-6 text-center text-warm">
-            No hay incidencias validadas en esta vista por ahora.
+            No hay reportes en esta vista por ahora.
           </p>
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-card">
@@ -204,6 +204,7 @@ export default function MapPage() {
                 <span className="font-mono text-[12px] text-warm">{inc.public_id}</span>
                 <span className="text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</span>
                 <PriorityTag band={inc.priority_band} />
+                {inc.awaiting_validation && <Tag>Sin validar</Tag>}
                 <span className="text-[12px] text-warm">
                   {inc.report_count} reporte(s) · {inc.confirmation_count} confirmación(es)
                 </span>
