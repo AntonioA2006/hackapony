@@ -8,7 +8,7 @@ Toda la plataforma corre en planes gratuitos, sin tarjeta de crédito.
 | Cuentas | **Firebase Authentication** | Spark | Registro, verificación de correo, recuperación y cambio de contraseña sin servidor de correo propio |
 | API FastAPI | **Render** Web Service (Docker) | Free | Ejecuta el `backend/Dockerfile` sin cambios |
 | Base de datos | **Supabase** Postgres + **PostGIS** | Free (500 MB) | Las consultas geoespaciales (radio en metros, punto en polígono) exigen PostGIS; Firestore no las soporta |
-| Fotografías | **Supabase Storage** (API S3) | Free (1 GB) | Firebase Storage exige plan Blaze desde oct-2024; las fotos se borran al cerrar cada caso |
+| Fotografías | **Supabase Storage** (REST, clave de servicio) | Free (1 GB) | Firebase Storage exige plan Blaze desde oct-2024; las fotos se borran al cerrar cada caso |
 | Mapa base | Esri World Light Gray | sin clave | Atribución incluida en el mapa |
 
 ```mermaid
@@ -98,3 +98,27 @@ desde el editor SQL de Supabase (`UPDATE users SET role = 'ADMINISTRADOR' WHERE 
   Lo que se recuerda es la región elegida, en una cookie de primera parte (`aa_region`, 180 días).
 - Las fotos se re-codifican sin EXIF (GPS) al subir y **se eliminan** cuando la incidencia pasa a
   *resuelta* o *descartada*; queda el evento `photos_purged` en el historial.
+
+
+## Estado actual del despliegue (configurado)
+
+| Pieza | Valor |
+|-------|-------|
+| Sitio | https://agua-alerta-mx.web.app (Firebase Hosting, proyecto `agua-alerta-mx`) |
+| API | https://agua-alerta-api.onrender.com (Render `srv-dbvj33qvcj2c73d3n3bg`, región Ohio, rama `main`, autodeploy) |
+| BD | Supabase `rvhhlhbzgjdfndlgxfxf` (us-east-2), PostgreSQL 17 + PostGIS, esquema en la migración 004 |
+| Usuario de BD de la API | `agua_app` (dueño de las tablas; sin superusuario) vía session pooler `aws-0-us-east-2.pooler.supabase.com:5432` |
+| Fotos | bucket privado `report-photos` (5 MB, JPEG/PNG/WebP), `STORAGE_BACKEND=supabase` |
+| Seguridad Supabase | RLS activo en todas las tablas y sin permisos para `anon`/`authenticated` (migración 004) |
+
+Los secretos (`DATABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_*`) viven solo en las variables de entorno de Render.
+
+### Dar rol de administración
+
+Desde el editor SQL de Supabase (como `postgres`):
+
+```sql
+UPDATE users SET role = 'SUPERADMINISTRADOR' WHERE email = 'tu-correo@dominio.com';
+```
+
+o definiendo `BOOTSTRAP_SUPERADMIN_EMAIL` en Render y reiniciando el servicio (promueve esa cuenta si ya existe).

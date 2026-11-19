@@ -9,6 +9,8 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    # Plan gratuito sin pre-deploy: el arranque hace de release (migraciones + datos INEGI idempotentes)
+    dockerCommand: sh scripts/start-release.sh
     healthCheckPath: /health
     autoDeploy: true
     envVars:

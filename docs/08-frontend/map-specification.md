@@ -9,14 +9,14 @@
 
 | Capa | Fuente | Visible |
 |------|--------|---------|
-| Base | OSM tiles | Todos |
+| Base | `VITE_MAP_TILE_URL` (si falta: Esri World Light Gray) | Todos |
 | Incidencias públicas | API `incidents/public` | Ciudadano |
 | Incidencias admin | API `incidents` | Admin |
 | Pin edición | Local state | Formulario reporte |
 
 ## Atribución
 
-Texto OSM © contribuidores visible según licencia ODbL.
+`VITE_MAP_TILE_ATTRIBUTION` más el crédito de límites y agua de INEGI. Sin variable, la atribución es la de Esri World Light Gray (datos de base OSM).
 
 ## Interacciones
 

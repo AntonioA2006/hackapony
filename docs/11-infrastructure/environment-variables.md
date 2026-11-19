@@ -14,6 +14,7 @@
 | `CORS_ORIGIN_REGEX` | No | Regex orígenes LAN (ver defaults en `config.py`) |
 | `HOST` / `PORT` | No | Referencia; uvicorn `0.0.0.0:8000` en Docker |
 | `DOCKER_WEB_API_BASE_URL` | Build web | Debe ser `/api/v1` |
+| `FIREBASE_PROJECT_ID` | No | Si está definido, la API acepta ID tokens de Firebase Auth además del JWT local |
 | `GROUPING_DISTANCE_M` | No | Default 75 |
 | `DUPLICATE_SUGGEST_RADIUS_M` | No | Default 50 |
 | `PRIORITY_POP_REF` | No | Default 5000 |
@@ -24,6 +25,10 @@
 | Variable | Descripción |
 |----------|-------------|
 | `VITE_API_BASE_URL` | Solo en `frontend/.env.local` (dev Vite); no usar `localhost` para LAN |
+| `VITE_MAP_TILE_URL` | Plantilla de teselas. Vacía → Esri World Light Gray (`{z}/{y}/{x}`). En Docker es build arg de `web` |
+| `VITE_MAP_TILE_ATTRIBUTION` | HTML de atribución de la capa base. Se le añade el crédito de INEGI. Vacía → atribución Esri |
+| `VITE_TILE_URL` / `VITE_TILE_ATTRIBUTION` | Alias anteriores. Se usan solo si `VITE_MAP_TILE_*` viene vacío |
+| `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | Config web pública. El build de producción lee `frontend/.env.production`. En Docker, un valor en el `.env` de la raíz la sustituye; un valor vacío no se inyecta |
 
 ## DB
 

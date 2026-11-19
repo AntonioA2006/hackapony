@@ -12,11 +12,18 @@ if (-not $ip) {
     Write-Error "No se detectó IPv4 por DHCP. Asigna la IP manualmente en frontend/.env.local"
 }
 
+$vitePath = Join-Path $root "frontend\.env.local"
+$preserved = @()
+if (Test-Path $vitePath) {
+    $preserved = @(Get-Content $vitePath | Where-Object { $_ -match '^\s*VITE_(MAP_TILE_|TILE_|FIREBASE_)' })
+}
 $viteLocal = @"
 # Generado por configure-lan.ps1 — no commitear
 VITE_API_BASE_URL=http://${ip}:8000/api/v1
 "@
-$vitePath = Join-Path $root "frontend\.env.local"
+if ($preserved.Count -gt 0) {
+    $viteLocal = $viteLocal + "`r`n" + ($preserved -join "`r`n")
+}
 Set-Content -Path $vitePath -Value $viteLocal -Encoding utf8
 
 $envFile = Join-Path $root ".env"
