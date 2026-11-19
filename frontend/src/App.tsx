@@ -10,6 +10,7 @@ import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AboutPage from "./pages/AboutPage";
 import LegalPage from "./pages/LegalPage";
+import CreditsPage from "./pages/CreditsPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import MapPage from "./pages/MapPage";
@@ -128,6 +129,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       </a>
       <NavLink to="/nosotros" className={navLink} onClick={() => setOpen(false)}>
         Sobre nosotros
+      </NavLink>
+      <NavLink to="/creditos" className={navLink} onClick={() => setOpen(false)}>
+        Créditos
       </NavLink>
       {supervisor && view === "operador" && (
         <NavLink to="/panel/equipo" className={navLink} onClick={() => setOpen(false)}>
@@ -262,6 +266,9 @@ function Shell({ children }: { children: React.ReactNode }) {
                   <NavLink to="/aviso-legal" className={menuItem} onClick={() => setOpen(false)}>
                     <i className="fa-solid fa-scale-balanced w-5" aria-hidden /> Aviso legal
                   </NavLink>
+                  <NavLink to="/creditos" className={menuItem} onClick={() => setOpen(false)}>
+                    <i className="fa-solid fa-trophy w-5" aria-hidden /> Créditos
+                  </NavLink>
                   <NavLink to="/login" className={menuItem} onClick={() => setOpen(false)}>
                     <i className="fa-solid fa-right-to-bracket w-5" aria-hidden /> Iniciar sesión
                   </NavLink>
@@ -287,6 +294,10 @@ function Shell({ children }: { children: React.ReactNode }) {
             {" · "}
             <Link to="/aviso-legal" className="underline hover:text-ink">
               Aviso legal
+            </Link>
+            {" · "}
+            <Link to="/creditos" className="underline hover:text-ink">
+              Créditos
             </Link>
           </p>
           <p>
@@ -354,6 +365,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/nosotros" element={<AboutPage />} />
           <Route path="/aviso-legal" element={<LegalPage />} />
+          <Route path="/creditos" element={<CreditsPage />} />
           <Route path="/mapa" element={<MapPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/recuperar" element={<ForgotPasswordPage />} />
