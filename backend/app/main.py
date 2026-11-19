@@ -16,26 +16,34 @@ settings = get_settings()
 logging.basicConfig(level=settings.log_level)
 
 app = FastAPI(title="Agua Alerta API", version="0.1.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_kw: dict = {
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.cors_origin_regex.strip():
+    _cors_kw["allow_origin_regex"] = settings.cors_origin_regex.strip()
+if settings.cors_origin_list:
+    _cors_kw["allow_origins"] = settings.cors_origin_list
+app.add_middleware(CORSMiddleware, **_cors_kw)
 
 Path(settings.photos_path).mkdir(parents=True, exist_ok=True)
 
 
 @app.get("/health")
-def health(db: Session = Depends(get_db)):
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def health_ready(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT PostGIS_Version();"))
-        return {"status": "ok", "database": "up", "postgis": True}
+        return {"status": "ready", "database": "up", "postgis": True}
     except SQLAlchemyError:
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "database": "unavailable", "postgis": False},
+            content={"status": "not_ready", "database": "unavailable", "postgis": False},
         )
 
 
