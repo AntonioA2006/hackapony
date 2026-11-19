@@ -15,6 +15,7 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
   const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const previews = useMemo(() => files.map((file) => ({ name: file.name, url: URL.createObjectURL(file) })), [files]);
   useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), [previews]);
 
@@ -37,21 +38,46 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
     setOpen(false);
   };
 
-  const start = async () => {
+  const usesNativeCamera = () =>
+    window.matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  const takePhoto = () => {
     setError(null);
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Este navegador no puede abrir la cámara. Elige una foto de la galería.");
+    if (usesNativeCamera()) {
+      cameraInputRef.current?.click();
       return;
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: "environment" } },
-      });
-      streamRef.current = stream;
-      setOpen(true);
-    } catch {
-      setError("No se permitió la cámara. Actívala en los permisos del navegador o elige una foto.");
+    void openBrowserCamera();
+  };
+
+  const openBrowserCamera = async () => {
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    const attempts: MediaStreamConstraints[] = [
+      { audio: false, video: { facingMode: "environment" } },
+      { audio: false, video: true },
+    ];
+    let last: unknown;
+    for (const constraints of attempts) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = stream;
+        setOpen(true);
+        return;
+      } catch (err) {
+        last = err;
+        if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) break;
+      }
+    }
+    const name = last instanceof DOMException ? last.name : "";
+    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      setError("No se permitió la cámara. En el candado de la barra de dirección elige Permitir y vuelve a pulsar Tomar foto.");
+    } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      setError("No hay una cámara disponible en este equipo. Elige un archivo de tu galería.");
+    } else {
+      setError("No se pudo abrir la cámara. Ciérrala en otras aplicaciones o elige un archivo.");
     }
   };
 
@@ -102,10 +128,21 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
       )}
       {files.length < max && (
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="press inline-flex min-h-11 items-center gap-2 rounded-full border border-cyan-edge bg-cyan px-4 text-body font-medium text-white" onClick={() => void start()}>
+          <button type="button" className="press inline-flex min-h-11 items-center gap-2 rounded-full border border-cyan-edge bg-cyan px-4 text-body font-medium text-white" onClick={takePhoto}>
             <i className="fa-solid fa-camera" aria-hidden />
             Tomar foto
           </button>
+          <input
+            ref={cameraInputRef}
+            className="sr-only"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              fromFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
           <label className="press inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-[#e2e8f0] bg-white px-4 text-body text-ink">
             <i className="fa-solid fa-image" aria-hidden />
             Elegir archivo
@@ -113,8 +150,7 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
               id={id}
               className="sr-only"
               type="file"
-              accept="image/jpeg,image/png,image/webp"
-              capture="environment"
+              accept="image/jpeg,image/png,image/webp,image/*"
               multiple={multiple}
               onChange={(e) => {
                 fromFiles(e.target.files);
@@ -124,7 +160,7 @@ export default function PhotoCapture({ id, files, onChange, multiple = false, ma
           </label>
         </div>
       )}
-      {error && <p className="mt-2 text-[13px] text-critical">{error}</p>}
+      {error && <p className="mt-2 max-w-full text-pretty text-[13px] leading-snug text-critical">{error}</p>}
       {open &&
         createPortal(
           <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-ink/60 p-4" role="dialog" aria-modal="true" aria-label="Cámara">
