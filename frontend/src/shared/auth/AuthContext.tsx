@@ -11,7 +11,16 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { apiFetch, clearTokens, getRefreshToken, getToken, setTokenProvider, setTokens, type Tokens } from "../api/client";
+import {
+  apiFetch,
+  clearTokens,
+  getRefreshToken,
+  getToken,
+  setTokenProvider,
+  setTokens,
+  withWakeRetry,
+  type Tokens,
+} from "../api/client";
 import { firebaseAuth, firebaseEnabled } from "../firebase";
 
 export type User = { id: string; email: string; display_name: string; role: string };
@@ -22,6 +31,12 @@ type AuthState = {
   /** "firebase" en producción; "local" usa la autenticación propia de la API (desarrollo). */
   mode: "firebase" | "local";
   emailVerified: boolean;
+  /** Hay sesión de Firebase pero la API no respondió (p. ej. servidor despertando). */
+  sessionError: string | null;
+  /** La API está tardando: se muestra "despertando el servidor". */
+  waking: boolean;
+  retrySession: () => Promise<void>;
+  checkEmailVerified: () => Promise<boolean>;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, display_name: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -34,6 +49,9 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/** El enlace del correo regresa al sitio (botón "Continuar" en la página de Firebase). */
+const verificationSettings = () => ({ url: `${window.location.origin}/tablero?verificado=1` });
+
 if (firebaseEnabled) {
   setTokenProvider(async () => (await firebaseAuth().currentUser?.getIdToken()) ?? null);
 }
@@ -42,10 +60,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [waking, setWaking] = useState(false);
   const mode = firebaseEnabled ? "firebase" : "local";
 
   const refreshUser = useCallback(async () => {
-    setUser(await apiFetch<User>("/users/me"));
+    setWaking(false);
+    try {
+      const me = await withWakeRetry(() => apiFetch<User>("/users/me"), () => setWaking(true));
+      setUser(me);
+      setSessionError(null);
+    } finally {
+      setWaking(false);
+    }
+  }, []);
+
+  /** Tras abrir el enlace del correo, Firebase marca la cuenta; aquí recargamos el estado y el token. */
+  const checkEmailVerified = useCallback(async () => {
+    const fbUser = firebaseEnabled ? firebaseAuth().currentUser : null;
+    if (!fbUser) return false;
+    await fbUser.reload();
+    if (fbUser.emailVerified) await fbUser.getIdToken(true);
+    setEmailVerified(fbUser.emailVerified);
+    return fbUser.emailVerified;
   }, []);
 
   useEffect(() => {
@@ -59,8 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         try {
           await refreshUser(); // la API crea la cuenta ciudadana en el primer acceso
-        } catch {
+        } catch (err) {
+          // No cerrar la sesión de Firebase por un fallo del servidor: se ofrece reintentar.
           setUser(null);
+          setSessionError((err as Error)?.message || "No pudimos cargar tu cuenta.");
         } finally {
           setLoading(false);
         }
@@ -75,6 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
     return undefined;
   }, [refreshUser]);
+
+  // Al volver a la pestaña (p. ej. después de abrir el enlace del correo) se actualiza la verificación.
+  useEffect(() => {
+    if (!firebaseEnabled) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && firebaseAuth().currentUser && !firebaseAuth().currentUser!.emailVerified) {
+        void checkEmailVerified().catch(() => undefined);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [checkEmailVerified]);
 
   const login = async (email: string, password: string) => {
     if (firebaseEnabled) {
@@ -94,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (firebaseEnabled) {
       const cred = await createUserWithEmailAndPassword(firebaseAuth(), email, password);
       await updateProfile(cred.user, { displayName: display_name });
-      await sendEmailVerification(cred.user).catch(() => undefined);
+      await sendEmailVerification(cred.user, verificationSettings()).catch(() => undefined);
       await cred.user.getIdToken(true); // incluye el nombre en el token para el alta en la API
       await apiFetch<User>("/users/me", { method: "PATCH", body: JSON.stringify({ display_name }) }).then(setUser);
       return;
@@ -107,7 +158,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   };
 
+  const retrySession = async () => {
+    setSessionError(null);
+    setLoading(true);
+    try {
+      await refreshUser();
+    } catch (err) {
+      setSessionError((err as Error)?.message || "No pudimos cargar tu cuenta.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
+    setSessionError(null);
     if (firebaseEnabled) {
       await signOut(firebaseAuth());
     } else {
@@ -124,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestPasswordReset = async (email: string) => {
     if (firebaseEnabled) {
-      await sendPasswordResetEmail(firebaseAuth(), email).catch((err) => {
+      await sendPasswordResetEmail(firebaseAuth(), email, { url: `${window.location.origin}/login` }).catch((err) => {
         // No revelar si la cuenta existe
         if ((err as { code?: string })?.code !== "auth/user-not-found") throw err;
       });
@@ -152,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resendVerification = async () => {
     const fbUser = firebaseEnabled ? firebaseAuth().currentUser : null;
-    if (fbUser) await sendEmailVerification(fbUser);
+    if (fbUser) await sendEmailVerification(fbUser, verificationSettings());
   };
 
   return (
@@ -162,6 +226,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         mode,
         emailVerified,
+        sessionError,
+        waking,
+        retrySession,
+        checkEmailVerified,
         login,
         register,
         logout,

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.domain.enums import UserRole
+from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, UserRole
 from app.models.entities import CensusArea, DataSourceCatalog, InegiIndicator, Municipality
 from app.services.inegi_import import import_ageb, import_municipalities, relink_territorial_context
 
@@ -95,7 +95,7 @@ def sources(user=Depends(require_roles(UserRole.SUPERADMINISTRADOR)), db: Sessio
 @router.get("/inegi/indicators")
 def indicators(
     municipality_id: UUID | None = None,
-    user=Depends(require_roles(UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)),
+    user=Depends(require_roles(*STAFF_ROLES)),
     db: Session = Depends(get_db),
 ):
     q = select(InegiIndicator)

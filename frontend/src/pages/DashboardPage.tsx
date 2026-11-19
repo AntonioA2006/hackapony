@@ -1,13 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiFetch } from "../shared/api/client";
 import { useAuth } from "../shared/auth/AuthContext";
 import { useRegion } from "../shared/region/RegionContext";
-import { ButtonLink, Notice, PageHeader, Stat } from "../shared/ui";
+import { Button, ButtonLink, Notice, PageHeader, Stat } from "../shared/ui";
 
 type Notification = { id: string; title: string; body: string; read_at: string | null; created_at: string };
 
 export default function DashboardPage() {
-  const { user, mode, emailVerified } = useAuth();
+  const { user, mode, emailVerified, checkEmailVerified, resendVerification } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const [verifyMsg, setVerifyMsg] = useState<{ tone: "success" | "info" | "error"; text: string } | null>(null);
+
+  // Regreso desde el enlace del correo (?verificado=1): confirmar con Firebase y avisar.
+  useEffect(() => {
+    if (params.get("verificado") !== "1") return;
+    void checkEmailVerified().then((ok) => {
+      setVerifyMsg(
+        ok
+          ? { tone: "success", text: "¡Listo! Tu correo quedó verificado." }
+          : { tone: "info", text: "Aún no vemos la verificación. Abre el enlace del correo y vuelve a esta página." },
+      );
+      params.delete("verificado");
+      setParams(params, { replace: true });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { region } = useRegion();
   const qc = useQueryClient();
   const notifications = useQuery({
@@ -36,8 +55,36 @@ export default function DashboardPage() {
           </>
         }
       />
+      {verifyMsg && <Notice tone={verifyMsg.tone}>{verifyMsg.text}</Notice>}
       {mode === "firebase" && !emailVerified && (
-        <Notice>Verifica tu correo desde el enlace que te enviamos para que tus reportes cuenten al priorizar.</Notice>
+        <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-card px-4 py-3">
+          <p className="mr-auto text-body text-warm">
+            Verifica tu correo desde el enlace que te enviamos (revisa también spam) para que tus reportes cuenten al priorizar.
+          </p>
+          <Button
+            onClick={() =>
+              void checkEmailVerified().then((ok) =>
+                setVerifyMsg(
+                  ok
+                    ? { tone: "success", text: "¡Listo! Tu correo quedó verificado." }
+                    : { tone: "info", text: "Todavía no aparece verificado. Abre el enlace del correo e inténtalo de nuevo." },
+                ),
+              )
+            }
+          >
+            Ya lo verifiqué
+          </Button>
+          <Button
+            variant="quiet"
+            onClick={() =>
+              void resendVerification()
+                .then(() => setVerifyMsg({ tone: "info", text: "Te enviamos un nuevo enlace de verificación." }))
+                .catch((e) => setVerifyMsg({ tone: "error", text: (e as Error).message }))
+            }
+          >
+            Reenviar correo
+          </Button>
+        </div>
       )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Reportes enviados" value={data?.total_reports ?? 0} />

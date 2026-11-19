@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.domain.enums import LeakSeverity, ReportCategory, ReportStatus
+from app.domain.enums import LeakFlow, LeakSeverity, ReportCategory, ReportStatus
 
 
 # Rectángulo que contiene a México (incluye islas); el polígono exacto se valida en el servicio.
@@ -19,6 +19,7 @@ class ReportCreate(BaseModel):
     longitude: float = Field(ge=MX_LON[0], le=MX_LON[1], description="Solo dentro de México")
     address_reference: str | None = Field(default=None, max_length=500)
     reported_at: datetime | None = None
+    leak_flow: LeakFlow | None = Field(default=None, description="goteo | chorro | inundacion")
 
     @field_validator("title", "description", "address_reference", mode="before")
     @classmethod
@@ -63,6 +64,8 @@ class ReportOut(BaseModel):
     incident_id: str | None
     created_at: datetime
     reported_at: datetime | None
+    leak_flow: LeakFlow | None = None
+    incident_status: str | None = None
     nearby_suggestions: list[NearbySuggestion] = Field(default_factory=list)
 
 

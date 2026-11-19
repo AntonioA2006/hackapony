@@ -1,11 +1,14 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LatLngBoundsExpression } from "leaflet";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { isStaff } from "../shared/roles";
+import { useRegionCounts } from "../shared/staff/api";
 import { apiFetch } from "../shared/api/client";
 import { useAuth } from "../shared/auth/AuthContext";
 import { BAND_LABELS, CATEGORY_LABELS, fmtInt, fmtPct, label } from "../shared/labels";
 import IncidentsMap, { MEXICO_BOUNDS, type MapIncident } from "../shared/map/IncidentsMap";
-import { BAND_COLORS, WATER_LEGEND } from "../shared/map/waterScale";
+import { BAND_COLORS, INCIDENT_LEGEND, regionIncidentColor, WATER_LEGEND } from "../shared/map/waterScale";
 import { useMunicipalities, useMunicipalitiesGeo, useStates, useStatesGeo, type Water } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
 import { LocationPrompt, RegionSelect } from "../shared/region/RegionPicker";
@@ -85,15 +88,38 @@ export default function MapPage() {
   const statesGeo = useStatesGeo();
   const munGeo = useMunicipalitiesGeo(region.cve_ent);
 
-  const isAdmin = user?.role === "ADMINISTRADOR" || user?.role === "SUPERADMINISTRADOR";
+  const staff = isStaff(user?.role);
+  const [search, setSearch] = useSearchParams();
+  const fLat = Number(search.get("lat"));
+  const fLon = Number(search.get("lon"));
+  const focus = Number.isFinite(fLat) && Number.isFinite(fLon) && search.get("lat") && search.get("lon")
+    ? { lat: fLat, lon: fLon, id: search.get("id") }
+    : null;
+  const [layer, setLayer] = useState<"agua" | "incidencias">(staff ? "incidencias" : "agua");
+  const counts = useRegionCounts(region.cve_ent, staff && layer === "incidencias");
+  const regionColors = useMemo(() => {
+    if (!(staff && layer === "incidencias")) return null;
+    const out: Record<string, string> = {};
+    for (const r of counts.data?.items ?? []) {
+      const c = regionIncidentColor(r);
+      if (c) out[r.id] = c;
+    }
+    return out;
+  }, [staff, layer, counts.data]);
+
+  // Al enfocar un punto (desde un reporte) se cargan las incidencias alrededor; si no, las del área visible.
+  const focusBbox = focus
+    ? [focus.lon - 0.05, focus.lat - 0.05, focus.lon + 0.05, focus.lat + 0.05].map((v) => v.toFixed(4)).join(",")
+    : null;
+  const queryBbox = focusBbox ?? bbox;
   const incidents = useQuery({
-    queryKey: ["map-incidents", isAdmin ? "admin" : "public", bbox],
-    enabled: typeof bbox === "string",
+    queryKey: ["map-incidents", staff ? "staff" : "public", queryBbox],
+    enabled: typeof queryBbox === "string",
     placeholderData: keepPreviousData,
     staleTime: 30_000,
     queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ bbox: bbox as string, page_size: "200" });
-      const path = isAdmin ? "/incidents/map" : "/incidents/public";
+      const params = new URLSearchParams({ bbox: queryBbox as string, page_size: "200" });
+      const path = staff ? "/incidents/map" : "/incidents/public";
       return apiFetch<Paginated<MapIncident>>(`${path}?${params}`, { signal });
     },
   });
@@ -153,8 +179,48 @@ export default function MapPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-2">
           {incidents.error && <QueryError error={incidents.error} context="map" onRetry={() => void incidents.refetch()} />}
+          {staff && (
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Capa del mapa">
+              {(
+                [
+                  ["incidencias", "Incidencias activas"],
+                  ["agua", "Agua en viviendas (INEGI)"],
+                ] as const
+              ).map(([k, l]) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={layer === k}
+                  onClick={() => setLayer(k)}
+                  className={`press rounded-full border px-3 py-1.5 text-[13px] ${layer === k ? "border-soot bg-soot text-white" : "border-line bg-card text-ink hover:border-muted"}`}
+                >
+                  {l}
+                </button>
+              ))}
+              {layer === "incidencias" && (
+                <ul className="ml-auto flex flex-wrap gap-3 text-[12px] text-warm">
+                  {INCIDENT_LEGEND.map((x) => (
+                    <li key={x.label} className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-sm" style={{ background: x.color }} /> {x.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {focus && (
+            <div className="anim-fade flex flex-wrap items-center gap-3 rounded-card border border-cyan/30 bg-sky/40 px-4 py-2 text-[13px]">
+              <span className="text-ink">Mostrando la ubicación exacta del reporte.</span>
+              <button type="button" className="text-cyan-edge hover:underline" onClick={() => setSearch({}, { replace: true })}>
+                Volver a la vista de mi región
+              </button>
+            </div>
+          )}
           <IncidentsMap
             incidents={list}
+            focus={focus}
+            regionColors={regionColors}
+            detailHref={staff ? (id) => `/panel/incidencias/${id}` : undefined}
             regions={region.cve_ent ? munGeo.data : statesGeo.data}
             selectedRegionId={region.cve_ent ? region.cvegeo : null}
             bounds={bounds}
@@ -170,7 +236,7 @@ export default function MapPage() {
           />
           <p className="text-[12px] text-warm">
             {region.cve_ent ? "Toca un municipio para enfocarlo." : "Toca un estado para ver sus municipios."}{" "}
-            {isAdmin
+            {staff
               ? "Ves todas las incidencias abiertas, también las que aún no se validan, en su ubicación real."
               : "La ubicación en el mapa está aproximada (~30 m) para no mostrar el punto exacto del reporte."}
             {incidents.isFetching ? " Actualizando esta vista…" : ""}
@@ -189,7 +255,7 @@ export default function MapPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-subheading">{isAdmin ? "Todas las incidencias" : "En esta vista"}</h2>
+          <h2 className="text-subheading">{staff ? "Todas las incidencias" : "En esta vista"}</h2>
           <Tag>{fmtInt(incidents.data?.total ?? 0)}</Tag>
         </div>
         {waiting ? (
@@ -204,7 +270,14 @@ export default function MapPage() {
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-card">
             {list.slice(0, 12).map((inc) => (
               <li key={inc.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <span className="font-mono text-[12px] text-warm">{inc.public_id}</span>
+                <button
+                  type="button"
+                  className="font-mono text-[12px] text-cyan-edge hover:underline"
+                  onClick={() => setSearch({ lat: String(inc.latitude), lon: String(inc.longitude), id: inc.id })}
+                  title="Ver ubicación exacta"
+                >
+                  {inc.public_id}
+                </button>
                 <span className="text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</span>
                 <PriorityTag band={inc.priority_band} />
                 {inc.awaiting_validation && <Tag>Sin validar</Tag>}

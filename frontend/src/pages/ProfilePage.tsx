@@ -4,6 +4,7 @@ import { authErrorMessage } from "../shared/firebase";
 import { useRegion } from "../shared/region/RegionContext";
 import { RegionSelect } from "../shared/region/RegionPicker";
 import { Button, Card, Field, Notice, PageHeader, Tag } from "../shared/ui";
+import { ROLE_LABELS } from "../shared/roles";
 
 export default function ProfilePage() {
   const { user, mode, emailVerified, updateDisplayName, changePassword, resendVerification } = useAuth();
@@ -43,6 +44,24 @@ export default function ProfilePage() {
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
 
       <Card>
+        <div className="mb-4 rounded-input border border-dashed border-muted bg-canvas p-3">
+          <p className="text-[12px] text-warm">Mi ID · compártelo con supervisión si te van a nombrar técnico</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <code className="break-all font-mono text-[13px] text-ink">{user?.id}</code>
+            <Button
+              variant="quiet"
+              onClick={() =>
+                void navigator.clipboard
+                  ?.writeText(user?.id ?? "")
+                  .then(() => setMsg({ tone: "success", text: "ID copiado al portapapeles." }))
+                  .catch(() => setMsg({ tone: "error", text: "No se pudo copiar; selecciónalo manualmente." }))
+              }
+            >
+              Copiar
+            </Button>
+            <Tag tone="accent">{ROLE_LABELS[user?.role ?? ""] ?? user?.role}</Tag>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-body text-ink">{user?.email}</p>
           {mode === "firebase" && (emailVerified ? <Tag tone="accent">Correo verificado</Tag> : <Tag>Correo sin verificar</Tag>)}

@@ -17,10 +17,10 @@ export default {
         sky: "#d6ecf8", // fondo del resaltado
         cyan: { DEFAULT: "#0b84c6", edge: "#086c9f" }, // azul agua: acción principal y enlaces
         // Semánticos (prioridad / estado)
-        critical: "#d9483b",
-        high: "#ee8a2e",
-        medium: "#e9b230",
-        low: "#7fa3bf",
+        critical: "#d03b3b",
+        high: "#ec835a",
+        medium: "#fab219",
+        low: "#94a3b4",
         ok: "#1e9e78",
       },
       fontFamily: {

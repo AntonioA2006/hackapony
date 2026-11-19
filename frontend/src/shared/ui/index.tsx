@@ -1,11 +1,11 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Link, type LinkProps } from "react-router-dom";
 import { BAND_LABELS, REPORT_STATUS_LABELS, label } from "../labels";
 
 type Variant = "primary" | "ghost" | "dark" | "quiet";
 
 const base =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-body font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+  "press inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-body font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 const variants: Record<Variant, string> = {
   // Acción principal: el único relleno cromático de la pantalla
   primary: "border border-cyan-edge bg-cyan text-white hover:bg-cyan-edge",
@@ -25,7 +25,7 @@ export function ButtonLink({ variant = "ghost", className = "", ...props }: Link
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-card border border-line bg-card p-6 shadow-card ${className}`}>{children}</div>;
+  return <div className={`lift rounded-card border border-line bg-card p-6 shadow-card ${className}`}>{children}</div>;
 }
 
 export function PageHeader({ title, lead, actions }: { title: ReactNode; lead?: ReactNode; actions?: ReactNode }) {
@@ -88,7 +88,7 @@ export function StatusTag({ status }: { status: string }) {
 
 export function Stat({ label, value, note }: { label: string; value: ReactNode; note?: ReactNode }) {
   return (
-    <div className="rounded-card border border-line bg-card p-5">
+    <div className="lift rounded-card border border-line bg-card p-5">
       <p className="text-[12px] font-medium uppercase tracking-[0.025em] text-warm">{label}</p>
       <p className="mt-1 font-display text-heading-sm tabular-nums">{value}</p>
       {note && <p className="mt-1 text-[12px] text-warm">{note}</p>}
@@ -153,4 +153,31 @@ export function Spinner({ label = "Cargando…" }: { label?: string }) {
       {label}
     </p>
   );
+}
+
+
+/** Número que cuenta hasta su valor al aparecer (respeta "reducir movimiento"). */
+export function CountUp({ value, format = (n: number) => Math.round(n).toLocaleString("es-MX") }: { value: number; format?: (n: number) => string }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setShown(value);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const from = 0;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / 700);
+      setShown(from + (value - from) * (1 - Math.pow(1 - k, 3)));
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{format(shown)}</>;
+}
+
+export function Skeleton({ className = "h-4 w-full" }: { className?: string }) {
+  return <div className={`skeleton ${className}`} aria-hidden />;
 }

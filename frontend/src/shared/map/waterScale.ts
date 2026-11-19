@@ -22,10 +22,25 @@ export const WATER_LEGEND = [
   { label: "Sin dato", color: NO_DATA_COLOR },
 ];
 
+/** Prioridad = estado (no serie): paleta de estado de referencia, siempre acompañada de su etiqueta. */
 export const BAND_COLORS: Record<string, string> = {
-  low: "#7fa3bf",
-  medium: "#e9b230",
-  high: "#ee8a2e",
-  critical: "#d9483b",
+  low: "#94a3b4",
+  medium: "#fab219",
+  high: "#ec835a",
+  critical: "#d03b3b",
 };
+
+/** Color de una región según sus incidencias activas: amarillo (pocas/medias) → naranja → rojo (críticas o muchas). */
+export function regionIncidentColor(r?: { active: number; critical: number; high: number } | null): string | null {
+  if (!r || r.active === 0) return null;
+  if (r.critical > 0 || r.active >= 8) return BAND_COLORS.critical;
+  if (r.high > 0 || r.active >= 3) return BAND_COLORS.high;
+  return BAND_COLORS.medium;
+}
+
+export const INCIDENT_LEGEND = [
+  { label: "Algunas (medias o bajas)", color: BAND_COLORS.medium },
+  { label: "Altas o 3+ activas", color: BAND_COLORS.high },
+  { label: "Críticas o 8+ activas", color: BAND_COLORS.critical },
+];
 export const BAND_RADIUS: Record<string, number> = { low: 6, medium: 7, high: 9, critical: 11 };

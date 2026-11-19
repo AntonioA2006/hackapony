@@ -1,26 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Button } from "../ui";
+import { useLocation } from "react-router-dom";
+import { Button, Notice } from "../ui";
+import { RegionSelect } from "./RegionPicker";
 import { useRegion } from "./RegionContext";
 
-const SKIP_PATHS = ["/login", "/registro", "/recuperar", "/restablecer"];
+const SKIP_PATHS = ["/login", "/registro", "/recuperar", "/restablecer", "/auth/accion"];
 
 /**
  * Primera visita: pide permiso para usar la ubicación (una vez) y así segmentar el mapa por estado y municipio.
  * La decisión y la región se guardan en cookies de primera parte; nunca se guardan coordenadas.
  */
 export default function LocationConsentDialog() {
-  const { consent, region, locating, useMyLocation, declineLocation } = useRegion();
+  const { consent, region, locating, locateError, useMyLocation, declineLocation } = useRegion();
+  const [manual, setManual] = useState(false);
   const { pathname } = useLocation();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const primaryRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (consent !== "unset" || region.cve_ent || SKIP_PATHS.includes(pathname)) return;
+    if (open || consent !== "unset" || region.cve_ent || SKIP_PATHS.includes(pathname)) return;
     const t = window.setTimeout(() => setOpen(true), 700);
     return () => window.clearTimeout(t);
-  }, [consent, region.cve_ent, pathname]);
+  }, [open, consent, region.cve_ent, pathname]);
 
   useEffect(() => {
     if (!open) return;
@@ -58,37 +59,52 @@ export default function LocationConsentDialog() {
           estado y municipio en México. No guardamos tus coordenadas: solo recordamos la región en una cookie de este sitio
           (180 días). Puedes cambiarla cuando quieras.
         </p>
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
-          <Button
-            ref={primaryRef}
-            variant="primary"
-            disabled={locating}
-            onClick={async () => {
-              await useMyLocation();
-              setOpen(false);
-            }}
-          >
-            {locating ? "Ubicando…" : "Usar mi ubicación"}
-          </Button>
-          <Button
-            onClick={() => {
-              declineLocation();
-              setOpen(false);
-              if (pathname !== "/mapa") navigate("/mapa");
-            }}
-          >
-            Elegir mi estado
-          </Button>
-          <Button
-            variant="quiet"
-            onClick={() => {
-              declineLocation();
-              setOpen(false);
-            }}
-          >
-            Ahora no
-          </Button>
-        </div>
+        {manual ? (
+          <div className="mt-5 space-y-3">
+            {locateError && <Notice tone="error">{locateError}</Notice>}
+            <RegionSelect compact hideLocate />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="primary"
+                disabled={!region.cve_ent}
+                onClick={() => {
+                  declineLocation(); // no volver a preguntar; la región elegida ya quedó en la cookie
+                  setOpen(false);
+                }}
+              >
+                Guardar mi región
+              </Button>
+              <Button variant="quiet" onClick={() => { declineLocation(); setOpen(false); }}>
+                Ver todo México
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
+            <Button
+              ref={primaryRef}
+              variant="primary"
+              disabled={locating}
+              onClick={async () => {
+                const ok = await useMyLocation();
+                if (ok) setOpen(false);
+                else setManual(true); // p. ej. Brave sin servicio de ubicación: elegir a mano aquí mismo
+              }}
+            >
+              {locating ? "Ubicando…" : "Usar mi ubicación"}
+            </Button>
+            <Button onClick={() => setManual(true)}>Elegir mi estado</Button>
+            <Button
+              variant="quiet"
+              onClick={() => {
+                declineLocation();
+                setOpen(false);
+              }}
+            >
+              Ahora no
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.firebase_auth import FirebaseTokenError, looks_like_firebase_token, verify_id_token
 from app.core.security import parse_token_user_id
-from app.domain.enums import UserRole
+from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, UserRole
 from app.models.entities import User
 
 security = HTTPBearer(auto_error=False)
@@ -88,5 +88,5 @@ def require_roles(*roles: UserRole):
     return _dep
 
 
-RequireAdmin = Depends(require_roles(UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR))
+RequireAdmin = Depends(require_roles(*STAFF_ROLES))
 RequireSuperAdmin = Depends(require_roles(UserRole.SUPERADMINISTRADOR))

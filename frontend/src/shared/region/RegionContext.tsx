@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { apiFetch } from "../api/client";
+import { getBrowserPosition, GeoError } from "../geo";
 
 /**
  * Segmentación nacional → entidad → municipio.
@@ -61,7 +62,8 @@ type RegionState = {
   locateError: string | null;
   setRegion: (r: Region) => void;
   setNational: () => void;
-  useMyLocation: () => Promise<void>;
+  /** true si se pudo ubicar la región. */
+  useMyLocation: () => Promise<boolean>;
   declineLocation: () => void;
 };
 
@@ -88,42 +90,32 @@ export function RegionProvider({ children }: { children: ReactNode }) {
     writeCookie(CONSENT_COOKIE, "denied");
   }, []);
 
-  const useMyLocation = useCallback(async () => {
+  const useMyLocation = useCallback(async (): Promise<boolean> => {
     setLocateError(null);
-    if (!("geolocation" in navigator)) {
-      setLocateError("Tu navegador no permite obtener la ubicación. Elige tu estado manualmente.");
-      return;
-    }
     setLocating(true);
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 15000,
-          maximumAge: 10 * 60 * 1000,
-        }),
-      );
+      const pos = await getBrowserPosition();
       setConsent("granted");
       writeCookie(CONSENT_COOKIE, "granted");
-      const loc = await apiFetch<LocateResponse>(
-        `/regions/locate?lat=${pos.coords.latitude.toFixed(4)}&lon=${pos.coords.longitude.toFixed(4)}`,
-      );
+      const loc = await apiFetch<LocateResponse>(`/regions/locate?lat=${pos.lat.toFixed(4)}&lon=${pos.lon.toFixed(4)}`);
       setRegion({
         cve_ent: loc.state.cve_ent,
         state_name: loc.state.name,
         cvegeo: loc.municipality?.cvegeo ?? null,
         municipality_name: loc.municipality?.name ?? null,
       });
+      return true;
     } catch (err) {
-      const geoErr = err as GeolocationPositionError;
-      if (geoErr?.code === 1) {
-        declineLocation();
-        setLocateError("Permiso de ubicación denegado. Puedes elegir tu estado manualmente.");
-      } else if (geoErr?.code === 2 || geoErr?.code === 3) {
-        setLocateError("No pudimos obtener tu ubicación. Elige tu estado manualmente.");
+      if (err instanceof GeoError) {
+        if (err.code === "denied") declineLocation();
+        setLocateError(err.message);
       } else {
-        setLocateError((err as Error)?.message || "No pudimos ubicar tu región.");
+        const msg = (err as Error)?.message || "";
+        setLocateError(
+          /fuera/i.test(msg) ? "Tu ubicación parece estar fuera de México. Elige tu estado manualmente." : msg || "No pudimos ubicar tu región.",
+        );
       }
+      return false;
     } finally {
       setLocating(false);
     }

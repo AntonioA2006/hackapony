@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.domain.enums import (
+    LeakFlow,
     IncidentStatus,
     LeakSeverity,
     PriorityBand,
@@ -86,6 +87,7 @@ class Report(Base):
         Enum(ReportStatus, name="report_status"), default=ReportStatus.received
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+    leak_flow: Mapped[LeakFlow | None] = mapped_column(Enum(LeakFlow, name="leak_flow", create_type=False))
     municipality_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("municipalities.id"))
     census_area_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("census_areas.id"))
     reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -134,6 +136,9 @@ class Incident(Base):
     municipality_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("municipalities.id"))
     census_area_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("census_areas.id"))
     photos_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    leak_flow: Mapped[LeakFlow | None] = mapped_column(Enum(LeakFlow, name="leak_flow", create_type=False))
+    assigned_to_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

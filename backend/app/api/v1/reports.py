@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_roles
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.domain.enums import ReportStatus, UserRole
+from app.domain.enums import STAFF_ROLES, SUPERVISOR_ROLES, ReportStatus, UserRole
 from app.models.entities import IncidentHistory, Report, ReportPhoto
 from app.schemas.common import PaginatedResponse
 from app.schemas.reports import HistoryItem, ReportCreate, ReportCreateResponse, ReportOut, ReportPatch, ReportPhotoOut
@@ -51,6 +51,8 @@ def _to_out(db: Session, report: Report, suggestions=None) -> ReportOut:
         incident_id=str(report.incident_id) if report.incident_id else None,
         created_at=report.created_at,
         reported_at=report.reported_at,
+        leak_flow=report.leak_flow,
+        incident_status=report.incident.status.value if report.incident is not None else None,
         nearby_suggestions=suggestions or [],
     )
 
@@ -85,6 +87,7 @@ def create_report(
         location=point_wkt(payload.latitude, payload.longitude),
         address_reference=payload.address_reference,
         reported_at=payload.reported_at,
+        leak_flow=payload.leak_flow,
         status=ReportStatus.received,
     )
     db.add(report)
@@ -139,7 +142,7 @@ def list_reports(
     page: int = 1,
     page_size: int = 20,
     status: ReportStatus | None = None,
-    user=Depends(require_roles(UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)),
+    user=Depends(require_roles(*STAFF_ROLES)),
     db: Session = Depends(get_db),
 ):
     page_size = min(max(page_size, 1), 100)
@@ -176,7 +179,7 @@ def patch_report(
     report = db.get(Report, report_id)
     if not report:
         raise HTTPException(404, detail="Reporte no encontrado")
-    is_admin = user.role in (UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)
+    is_admin = user.role in STAFF_ROLES
     if not is_admin:
         if report.user_id != user.id or report.status not in (ReportStatus.received,):
             raise HTTPException(403, detail="Sin permiso")
@@ -252,6 +255,16 @@ async def upload_photo(
     )
 
 
+@router.get("/{report_id}/photos", response_model=list[ReportPhotoOut])
+def list_photos(report_id: uuid.UUID, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Fotos del reporte: visibles para quien reportó y para el personal (nunca en el mapa público)."""
+    report = db.get(Report, report_id)
+    if not report or (user.role not in STAFF_ROLES and report.user_id != user.id):
+        raise HTTPException(404, detail="Reporte no encontrado")
+    photos = db.scalars(select(ReportPhoto).where(ReportPhoto.report_id == report.id).order_by(ReportPhoto.created_at)).all()
+    return [ReportPhotoOut(id=str(p.id), mime_type=p.mime_type, size_bytes=p.size_bytes, created_at=p.created_at) for p in photos]
+
+
 @router.get("/{report_id}/photos/{photo_id}/content")
 def get_photo_content(
     report_id: uuid.UUID,
@@ -263,7 +276,7 @@ def get_photo_content(
     photo = db.get(ReportPhoto, photo_id)
     if not report or not photo or photo.report_id != report.id:
         raise HTTPException(404, detail="No encontrado")
-    is_admin = user.role in (UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)
+    is_admin = user.role in STAFF_ROLES
     if user.role == UserRole.CIUDADANO and report.user_id != user.id:
         raise HTTPException(403, detail="Sin permiso")
     data = get_storage().get(photo.storage_key)

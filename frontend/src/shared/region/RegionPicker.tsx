@@ -8,7 +8,7 @@ export function LocationPrompt() {
   return locateError ? <Notice tone="error">{locateError}</Notice> : null;
 }
 
-export function RegionSelect({ compact = false }: { compact?: boolean }) {
+export function RegionSelect({ compact = false, hideLocate = false }: { compact?: boolean; hideLocate?: boolean }) {
   const { region, setRegion, setNational, useMyLocation, locating } = useRegion();
   const states = useStates();
   const municipalities = useMunicipalities(region.cve_ent);
@@ -57,9 +57,11 @@ export function RegionSelect({ compact = false }: { compact?: boolean }) {
           ))}
         </select>
       </label>
-      <Button variant="ghost" onClick={() => void useMyLocation()} disabled={locating}>
-        {locating ? "Ubicando…" : "Mi ubicación"}
-      </Button>
+      {!hideLocate && (
+        <Button variant="ghost" onClick={() => void useMyLocation()} disabled={locating}>
+          {locating ? "Ubicando…" : "Mi ubicación"}
+        </Button>
+      )}
     </div>
   );
 }
