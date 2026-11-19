@@ -17,6 +17,9 @@ export default function CrewOrderPage() {
   const [me, setMe] = useState<[number, number] | null>(null);
   const [geoMsg, setGeoMsg] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [note, setNote] = useState("");
+  const [minutes, setMinutes] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
   const detail = useQuery({ queryKey: ["incident-detail", id], queryFn: () => apiFetch<IncidentDetail>(`/incidents/${id}/detail`) });
 
   const locate = () => {
@@ -28,10 +31,16 @@ export default function CrewOrderPage() {
   useEffect(locate, []);
 
   const close = useMutation({
-    mutationFn: () => apiFetch(`/incidents/${id}`, { method: "PATCH", body: JSON.stringify({ status: "resolved" }) }),
+    mutationFn: () => {
+      const body = new FormData();
+      body.set("description", note.trim());
+      body.set("minutes_spent", String(Number(minutes)));
+      if (photo) body.set("file", photo);
+      return apiFetch(`/incidents/${id}/resolution`, { method: "POST", body });
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["crew-orders"] });
-      setMsg({ tone: "success", text: "Orden atendida. Se avisó a quien reportó, se cerró el ticket y se eliminaron las fotos." });
+      setMsg({ tone: "success", text: "Enviado al operador. Quien reportó ya lo ve resuelto; la foto no es visible para esa persona." });
       setTimeout(() => navigate("/cuadrilla"), 2200);
     },
     onError: (e) => setMsg({ tone: "error", text: (e as Error).message }),
@@ -43,7 +52,8 @@ export default function CrewOrderPage() {
   const target: [number, number] = [inc.latitude, inc.longitude];
   const distance = me ? haversineMeters(me, target) : null;
   const phones = [...new Set(reports.map((r) => r.contact_phone).filter(Boolean) as string[])];
-  const closed = inc.status === "resolved" || inc.status === "dismissed";
+  const closed = inc.status === "resolved" || inc.status === "dismissed" || inc.status === "pending_verification";
+  const sent = inc.status === "pending_verification" || inc.status === "resolved";
   const coords = `${inc.latitude.toFixed(6)}, ${inc.longitude.toFixed(6)}`;
 
   return (
@@ -130,17 +140,44 @@ export default function CrewOrderPage() {
         </ul>
       </Card>
 
+      {sent && (
+        <Notice tone="success">
+          {inc.status === "pending_verification"
+            ? "El operador debe verificar este cierre. Quien reportó ya lo ve como resuelto."
+            : "El operador confirmó el cierre."}
+        </Notice>
+      )}
       {!closed && (
-        <div className="fixed inset-x-0 bottom-0 z-[900] border-t border-line bg-canvas/95 px-4 pt-3 backdrop-blur" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+        <Card>
+          <h2 className="text-subheading">Dar por resuelta</h2>
+          <p className="mt-1 text-body text-warm">Foto de la reparación, qué se hizo y cuánto tiempo tomó. Eso se envía al operador. Quien reportó no ve la foto.</p>
+          <label className="mt-4 block">
+            <span className="label">Foto de cómo quedó</span>
+            <input
+              className="field"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          <label className="mt-3 block">
+            <span className="label">Cómo se resolvió</span>
+            <textarea className="field min-h-24" value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder="Qué se reparó y con qué" />
+          </label>
+          <label className="mt-3 block">
+            <span className="label">Tiempo empleado (minutos)</span>
+            <input className="field" inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value.replace(/\D/g, ""))} placeholder="45" />
+          </label>
           <Button
             variant="primary"
-            className="mx-auto flex min-h-[52px] w-full max-w-page text-[16px]"
-            disabled={close.isPending}
-            onClick={() => window.confirm("¿La fuga quedó reparada? Se cerrará el ticket y se eliminarán las fotos.") && close.mutate()}
+            className="mt-4 min-h-[48px] w-full"
+            disabled={close.isPending || !photo || note.trim().length < 10 || !minutes}
+            onClick={() => close.mutate()}
           >
-            {close.isPending ? "Cerrando…" : "✓ Marcar orden como atendida"}
+            {close.isPending ? "Enviando…" : "Enviar a verificación"}
           </Button>
-        </div>
+        </Card>
       )}
     </div>
   );

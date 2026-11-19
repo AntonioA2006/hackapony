@@ -148,6 +148,30 @@ class Incident(Base):
     reports: Mapped[list["Report"]] = relationship(back_populates="incident")
     confirmations: Mapped[list["CitizenConfirmation"]] = relationship(back_populates="incident")
     history: Mapped[list["IncidentHistory"]] = relationship(back_populates="incident")
+    resolution: Mapped["IncidentResolution | None"] = relationship(back_populates="incident", uselist=False)
+
+
+class IncidentResolution(Base):
+    """Cierre de campo: la cuadrilla explica la reparación, el tiempo y adjunta una foto.
+
+    La foto solo la ven despacho y la cuadrilla asignada. Al confirmar el operador se borra del almacenamiento.
+    """
+
+    __tablename__ = "incident_resolutions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), unique=True, index=True)
+    crew_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    minutes_spent: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_key: Mapped[str | None] = mapped_column(String(255))
+    mime_type: Mapped[str | None] = mapped_column(String(100))
+    size_bytes: Mapped[int | None] = mapped_column(Integer)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verified_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+
+    incident: Mapped["Incident"] = relationship(back_populates="resolution")
 
 
 class IncidentRating(Base):
