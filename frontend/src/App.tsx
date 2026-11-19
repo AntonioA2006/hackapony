@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { useAuth } from "./shared/auth/AuthContext";
-import { ButtonLink, Spinner } from "./shared/ui";
+import { Button, ButtonLink, Spinner } from "./shared/ui";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -148,8 +148,26 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <Spinner />;
+  const { user, loading, waking, sessionError, retrySession, logout } = useAuth();
+  if (loading) return <Spinner label={waking ? "Despertando el servidor… puede tardar hasta un minuto." : "Cargando…"} />;
+  if (!user && sessionError) {
+    // Sesión de Firebase válida pero la API no respondió: no expulsar a la persona al login.
+    return (
+      <div className="mx-auto max-w-md rounded-card border border-line bg-card p-6 text-center shadow-card">
+        <h2 className="text-subheading">No pudimos cargar tu cuenta</h2>
+        <p className="mt-2 text-body text-warm">
+          Tu sesión está abierta, pero el servidor no respondió. Si nadie lo usó en un rato, tarda hasta un minuto en
+          despertar.
+        </p>
+        <div className="mt-5 flex justify-center gap-2">
+          <Button variant="primary" onClick={() => void retrySession()}>
+            Reintentar
+          </Button>
+          <Button onClick={() => void logout()}>Cerrar sesión</Button>
+        </div>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

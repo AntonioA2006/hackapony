@@ -50,6 +50,42 @@ export class ApiConnectionError extends Error {
   }
 }
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+/** Errores pasajeros: sin conexión, servidor despertando (502/503/504) o límite momentáneo. */
+export function isTransient(err: unknown): boolean {
+  return err instanceof ApiConnectionError || (err instanceof ApiError && [429, 502, 503, 504].includes(err.status));
+}
+
+/** Reintenta una llamada mientras el servidor despierta (plan gratuito: hasta ~1 min). */
+export async function withWakeRetry<T>(fn: () => Promise<T>, onWaiting?: () => void): Promise<T> {
+  const delays = [2000, 4000, 8000, 12000, 15000, 20000];
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isTransient(err) || i >= delays.length) throw err;
+      onWaiting?.();
+      await new Promise((r) => setTimeout(r, delays[i]));
+    }
+  }
+}
+
+/** Despierta la API en segundo plano al abrir el sitio, para que el login ya la encuentre lista. */
+export function warmUpApi() {
+  const base = getApiBase();
+  const root = base.replace(/\/api\/v1\/?$/, "");
+  void fetch(`${root}/health`, { mode: "cors", cache: "no-store" }).catch(() => undefined);
+}
+
 export type Tokens = {
   access_token: string;
   refresh_token: string;
@@ -151,7 +187,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       if (import.meta.env.DEV) {
         console.warn("[apiFetch]", res.status, path, msg);
       }
-      throw new Error(typeof msg === "string" ? msg : "No fue posible completar la solicitud.");
+      throw new ApiError(typeof msg === "string" ? msg : "No fue posible completar la solicitud.", res.status);
     }
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;

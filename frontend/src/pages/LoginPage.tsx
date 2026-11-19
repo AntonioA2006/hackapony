@@ -7,7 +7,7 @@ import { fieldA11y, validateEmail } from "../shared/validation";
 import AuthLayout from "./AuthLayout";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, waking } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,6 +48,9 @@ export default function LoginPage() {
     >
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {error && <Notice tone="error">{error}</Notice>}
+        {busy && waking && (
+          <Notice>El servidor estaba en reposo y está despertando; esto puede tardar hasta un minuto. No cierres la página.</Notice>
+        )}
         <Field label="Correo electrónico" htmlFor="login-email">
           <input className="field" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required {...fieldA11y("login-email")} />
         </Field>
@@ -59,7 +62,7 @@ export default function LoginPage() {
             ¿Olvidaste tu contraseña?
           </Link>
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Entrando…" : "Entrar"}
+            {busy ? (waking ? "Despertando el servidor…" : "Entrando…") : "Entrar"}
           </Button>
         </div>
       </form>
