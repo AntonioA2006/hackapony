@@ -1,11 +1,12 @@
 import L, { type LatLngBoundsExpression, type PathOptions } from "leaflet";
 import type { Feature, Geometry } from "geojson";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { BAND_LABELS, CATEGORY_LABELS, fmtPct, label } from "../labels";
 import { useMexicoOutline, type RegionFeatureCollection, type Water } from "../region/api";
 import { mapTileAttribution, mapTileUrl } from "./tileConfig";
 import { MAP_OPERATING_BOUNDS, VIEWPORT_DEBOUNCE_MS, boundsToQueryBBox } from "./viewportBbox";
+import { clusterCellDegrees, clusterIncidents } from "./clusterIncidents";
 import { BAND_COLORS, BAND_RADIUS, waterColor } from "./waterScale";
 
 export type MapIncident = {
@@ -56,7 +57,7 @@ function OutsideMexicoMask() {
       positions={rings}
       pane="mask"
       interactive={false}
-      pathOptions={{ stroke: true, color: "#9fb4c7", weight: 1, fillColor: "#f5f9fc", fillOpacity: 0.88 }}
+      pathOptions={{ stroke: true, color: "#9fb4c7", weight: 1, fillColor: "#f7fafc", fillOpacity: 0.88 }}
     />
   );
 }
@@ -174,8 +175,133 @@ const pinIcon = L.divIcon({
   className: "",
   iconSize: [22, 22],
   iconAnchor: [11, 11],
-  html: '<div style="width:22px;height:22px;border-radius:9999px;background:#0b84c6;border:3px solid #fff;box-shadow:rgba(0,0,0,.25) 0 2px 6px"></div>',
+  html: '<div style="width:22px;height:22px;border-radius:9999px;background:#1479e8;border:3px solid #fff;box-shadow:rgba(11,31,51,.25) 0 2px 6px"></div>',
 });
+
+function IncidentLayer({
+  incidents,
+  focus,
+  detailHref,
+  onRate,
+  onConfirm,
+  pickMode,
+}: {
+  incidents: MapIncident[];
+  focus?: Props["focus"];
+  detailHref?: (id: string) => string;
+  onRate?: (id: string, score: number) => void;
+  onConfirm?: (id: string) => void;
+  pickMode?: boolean;
+}) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(() => map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  const cell = !pickMode && !focus && incidents.length > 8 ? clusterCellDegrees(zoom) : null;
+  const groups = cell ? clusterIncidents(incidents, cell) : incidents.map((inc) => ({ key: inc.id, latitude: inc.latitude, longitude: inc.longitude, items: [inc] }));
+
+  return (
+    <>
+      {groups.map((group) =>
+        group.items.length > 1 ? (
+          <Marker
+            key={group.key}
+            position={[group.latitude, group.longitude]}
+            icon={L.divIcon({
+              className: "",
+              iconSize: [36, 36],
+              iconAnchor: [18, 18],
+              html: `<div style="display:grid;place-items:center;width:36px;height:36px;border-radius:9999px;background:#0b1f33;color:#fff;border:2px solid #fff;font:600 12px Inter,sans-serif;box-shadow:0 8px 20px rgba(11,31,51,.25)">${group.items.length}</div>`,
+            })}
+            eventHandlers={{ click: () => map.flyTo([group.latitude, group.longitude], Math.min(zoom + 2, 12)) }}
+          >
+            <Popup>
+              <p className="text-[13px] text-ink">{group.items.length} incidencias en esta zona. Acércate para ver cada una.</p>
+            </Popup>
+          </Marker>
+        ) : (
+          <IncidentMarker key={group.items[0].id} inc={group.items[0]} focus={focus} detailHref={detailHref} onRate={onRate} onConfirm={onConfirm} />
+        ),
+      )}
+    </>
+  );
+}
+
+function IncidentMarker({
+  inc,
+  focus,
+  detailHref,
+  onRate,
+  onConfirm,
+}: {
+  inc: MapIncident;
+  focus?: Props["focus"];
+  detailHref?: (id: string) => string;
+  onRate?: (id: string, score: number) => void;
+  onConfirm?: (id: string) => void;
+}) {
+  return (
+    <CircleMarker
+      center={[inc.latitude, inc.longitude]}
+      radius={BAND_RADIUS[inc.priority_band] ?? 6}
+      pathOptions={{
+        color: inc.validated === false || inc.awaiting_validation ? "#0b1f33" : "#ffffff",
+        weight: 2,
+        dashArray: inc.validated === false || inc.awaiting_validation ? "3 3" : undefined,
+        fillColor: BAND_COLORS[inc.priority_band] ?? "#94a3b4",
+        fillOpacity: 0.95,
+      }}
+      eventHandlers={{
+        add: (e) => {
+          if (focus?.id && focus.id === inc.id) setTimeout(() => e.target.openPopup(), 1300);
+        },
+      }}
+    >
+      <Popup>
+        <div className="space-y-1 text-[13px]">
+          <p className="font-mono text-[12px] text-warm">{inc.public_id}</p>
+          <p className="font-medium text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</p>
+          {(inc.municipality_name || inc.state_name) && (
+            <p className="text-warm">{[inc.municipality_name, inc.state_name].filter(Boolean).join(", ")}</p>
+          )}
+          {(inc.validated === false || inc.awaiting_validation) && <p className="text-[12px] font-medium text-[#7a5a05]">Sin validar todavía</p>}
+          <p className="text-warm">
+            Prioridad {label(BAND_LABELS, inc.priority_band).toLowerCase()} · {inc.report_count} reporte(s) · {inc.confirmation_count} confirmación(es)
+          </p>
+          {detailHref && (
+            <a href={detailHref(inc.id)} className="mr-2 inline-block rounded-full bg-cyan px-3 py-1 text-[12px] font-medium text-white">
+              Abrir ficha
+            </a>
+          )}
+          {onRate && (
+            <p className="flex flex-wrap items-center gap-1 pt-1">
+              <span className="text-[12px] text-warm">Satisfacción</span>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className="min-h-11 min-w-8 rounded-full border border-line px-2 text-[13px] text-ink hover:border-muted"
+                  onClick={() => onRate(inc.id, n)}
+                  aria-label={`Calificar ${n} de 5`}
+                >
+                  {n}
+                </button>
+              ))}
+            </p>
+          )}
+          {onConfirm && (
+            <button
+              type="button"
+              className="mt-1 min-h-11 rounded-full border border-line px-4 py-2 text-[13px] text-ink hover:border-muted"
+              onClick={() => onConfirm(inc.id)}
+            >
+              Yo también la vi
+            </button>
+          )}
+        </div>
+      </Popup>
+    </CircleMarker>
+  );
+}
 
 export default function IncidentsMap({
   incidents = [],
@@ -212,14 +338,14 @@ export default function IncidentsMap({
       return {
         fillColor: c ?? "#ffffff",
         fillOpacity: c ? 0.62 : 0.15,
-        color: selected ? "#0b2338" : "#c9d5e0",
+        color: selected ? "#0b1f33" : "#c5d2df",
         weight: selected ? 2 : 0.8,
       };
     }
     return {
       fillColor: waterColor(feature?.properties.water?.pct_sin_agua_entubada),
       fillOpacity: 0.72,
-      color: selected ? "#0b2338" : "#ffffff",
+      color: selected ? "#0b1f33" : "#ffffff",
       weight: selected ? 2 : 0.8,
     };
   };
@@ -244,7 +370,7 @@ export default function IncidentsMap({
       {focus && <Marker position={[focus.lat, focus.lon]} icon={focusIcon} zIndexOffset={1000} />}
       {route && (
         <>
-          <Polyline positions={[route.from, route.to]} pathOptions={{ color: "#0b2338", weight: 3, dashArray: "6 6", opacity: 0.85 }} />
+          <Polyline positions={[route.from, route.to]} pathOptions={{ color: "#0b1f33", weight: 3, dashArray: "6 6", opacity: 0.85 }} />
           <CircleMarker center={route.from} radius={7} pathOptions={{ color: "#ffffff", weight: 3, fillColor: "#1baf7a", fillOpacity: 1 }} />
           <FitRoute route={route} />
         </>
@@ -267,70 +393,7 @@ export default function IncidentsMap({
           }}
         />
       )}
-      {incidents.map((inc) => (
-        <CircleMarker
-          key={inc.id}
-          center={[inc.latitude, inc.longitude]}
-          radius={BAND_RADIUS[inc.priority_band] ?? 6}
-          pathOptions={{
-            color: inc.validated === false || inc.awaiting_validation ? "#0b2338" : "#ffffff",
-            weight: 2,
-            dashArray: inc.validated === false || inc.awaiting_validation ? "3 3" : undefined,
-            fillColor: BAND_COLORS[inc.priority_band] ?? "#94a3b4",
-            fillOpacity: 0.95,
-          }}
-          eventHandlers={{
-            add: (e) => {
-              if (focus?.id && focus.id === inc.id) setTimeout(() => e.target.openPopup(), 1300);
-            },
-          }}
-        >
-          <Popup>
-            <div className="space-y-1 text-[13px]">
-              <p className="font-mono text-[12px] text-warm">{inc.public_id}</p>
-              <p className="font-medium text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</p>
-              {(inc.municipality_name || inc.state_name) && (
-                <p className="text-warm">{[inc.municipality_name, inc.state_name].filter(Boolean).join(", ")}</p>
-              )}
-              {(inc.validated === false || inc.awaiting_validation) && <p className="text-[12px] font-medium text-[#7a5a05]">Sin validar todavía</p>}
-              <p className="text-warm">
-                Prioridad {label(BAND_LABELS, inc.priority_band).toLowerCase()} · {inc.report_count} reporte(s) ·{" "}
-                {inc.confirmation_count} confirmación(es)
-              </p>
-              {detailHref && (
-                <a href={detailHref(inc.id)} className="mr-2 inline-block rounded-full bg-cyan px-3 py-1 text-[12px] font-medium text-white">
-                  Abrir ficha
-                </a>
-              )}
-              {onRate && (
-                <p className="flex flex-wrap items-center gap-1 pt-1">
-                  <span className="text-[12px] text-warm">Satisfacción</span>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      className="min-h-11 min-w-8 rounded-full border border-line px-2 text-[13px] text-ink hover:border-muted"
-                      onClick={() => onRate(inc.id, n)}
-                      aria-label={`Calificar ${n} de 5`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </p>
-              )}
-              {onConfirm && (
-                <button
-                  type="button"
-                  className="mt-1 min-h-11 rounded-full border border-line px-4 py-2 text-[13px] text-ink hover:border-muted"
-                  onClick={() => onConfirm(inc.id)}
-                >
-                  Yo también la vi
-                </button>
-              )}
-            </div>
-          </Popup>
-        </CircleMarker>
-      ))}
+      <IncidentLayer incidents={incidents} focus={focus} detailHref={detailHref} onRate={onRate} onConfirm={onConfirm} pickMode={pickMode} />
       {pickMode && (
         <>
           <PinPicker onPick={onPick} />

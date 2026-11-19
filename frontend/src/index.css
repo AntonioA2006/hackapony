@@ -44,7 +44,7 @@
 @layer components {
   /* Única marca cromática dentro de un titular */
   .highlight {
-    @apply rounded bg-sky px-2 py-0.5 text-cyan-edge;
+    @apply text-cyan;
   }
   .field {
     @apply w-full rounded-input border border-muted bg-card px-3 py-2 text-body text-ink placeholder:text-ash focus:border-cyan focus:outline-none focus:ring-2 focus:ring-cyan/30 disabled:bg-canvas disabled:text-ash;
@@ -69,7 +69,7 @@
 /* Leaflet con la tipografía y los tonos del sistema */
 .leaflet-container {
   font-family: inherit;
-  background: #eef3f7;
+  background: #eef3f8;
 }
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
@@ -84,16 +84,24 @@
 
 /* ---------------------------------------------------------------- movimiento */
 @keyframes aa-fade-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
+  from { transform: translateY(8px); }
+  to { transform: none; }
 }
 @keyframes aa-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes aa-pop { 0% { transform: scale(0.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes aa-shimmer { 100% { transform: translateX(100%); } }
 @keyframes aa-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(11, 132, 198, 0.55); }
-  70% { box-shadow: 0 0 0 18px rgba(11, 132, 198, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(11, 132, 198, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(20, 121, 232, 0.45); }
+  70% { box-shadow: 0 0 0 18px rgba(20, 121, 232, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(20, 121, 232, 0); }
+}
+@keyframes aa-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes aa-toast-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(6px); }
 }
 @keyframes aa-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes aa-draw { from { stroke-dashoffset: var(--len, 2000); } to { stroke-dashoffset: 0; } }
@@ -105,6 +113,8 @@
   .anim-page > *:nth-child(4) { animation-delay: 0.15s; }
   .anim-page > *:nth-child(5) { animation-delay: 0.2s; }
   .anim-page > *:nth-child(n + 6) { animation-delay: 0.25s; }
+  .anim-toast { animation: aa-toast-in 0.2s ease-out both; }
+  .anim-toast-out { animation: aa-toast-out 0.2s ease-in both; }
   .anim-pop { animation: aa-pop 0.25s ease-out both; }
   .anim-fade { animation: aa-fade 0.3s ease-out both; }
   .anim-bar { transform-origin: left; animation: aa-grow-x 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
@@ -122,9 +132,10 @@
 }
 
 .aa-focus-pin {
-  width: 22px; height: 22px; border-radius: 9999px; background: #0b84c6; border: 3px solid #fff;
+  width: 22px; height: 22px; border-radius: 9999px; background: #1479e8; border: 3px solid #fff;
   animation: aa-pulse 1.6s infinite;
 }
+.leaflet-bottom.leaflet-right { margin-bottom: 5.5rem; margin-right: 0.5rem; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }

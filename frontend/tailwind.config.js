@@ -6,16 +6,18 @@ export default {
     extend: {
       colors: {
         // Paleta "agua": lienzo frío claro, azul profundo para texto, un azul de acción y colores con significado.
-        canvas: "#f5f9fc",
+        canvas: "#f7fafc",
         card: "#ffffff",
-        line: "#e1e8ef",
-        muted: "#c9d5e0",
-        ash: "#94a3b4",
-        warm: "#556678", // texto secundario (pizarra)
-        ink: "#0b2338", // azul marino casi negro
-        soot: "#12324f", // superficies oscuras / botón secundario
-        sky: "#d6ecf8", // fondo del resaltado
-        cyan: { DEFAULT: "#0b84c6", edge: "#086c9f" }, // azul agua: acción principal y enlaces
+        line: "#e4ebf2",
+        muted: "#c5d2df",
+        ash: "#8ea0b3",
+        warm: "#526277",
+        ink: "#142235",
+        soot: "#0b1f33",
+        sky: "#e7f2fc",
+        tide: "#14b8a6",
+        mist: "#38bdf8",
+        cyan: { DEFAULT: "#1479e8", edge: "#0e5fbe" },
         // Semánticos (prioridad / estado)
         critical: "#d03b3b",
         high: "#ec835a",

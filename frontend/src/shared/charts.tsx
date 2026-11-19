@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 /** Serie única = magnitud: un solo tono (azul agua). */
-const SINGLE = "#0b84c6";
+const SINGLE = "#1479e8";
 /** Dos series (abiertas / resueltas): slots validados 1 y 3 de la paleta de referencia. */
 export const SERIES = { opened: "#2a78d6", resolved: "#1baf7a" } as const;
 

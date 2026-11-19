@@ -388,6 +388,20 @@ export default function ReportPage() {
         }
         lead="Mientras más preciso sea el punto y la descripción, más rápido se puede validar y atender."
       />
+      <ol className="grid gap-2 sm:grid-cols-3" aria-label="Progreso del reporte">
+        {(
+          [
+            ["Tipo", Boolean(category && severity)],
+            ["Descripción", !errors.title && !errors.description && title.trim().length > 0],
+            ["Ubicación", Boolean(point) && !errors.point],
+          ] as const
+        ).map(([name, done], i) => (
+          <li key={name} className={`rounded-card border px-3 py-2 ${done ? "border-cyan/40 bg-sky/50" : "border-line bg-card"}`}>
+            <p className="text-[11px] uppercase tracking-[0.04em] text-warm">Paso {i + 1}</p>
+            <p className="text-body font-medium text-ink">{done ? "Listo · " : ""}{name}</p>
+          </li>
+        ))}
+      </ol>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,420px)_1fr]">
         <div className="space-y-5">
           <Field label="¿Qué está pasando?">
