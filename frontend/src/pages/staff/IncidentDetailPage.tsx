@@ -49,7 +49,7 @@ export default function IncidentDetailPage() {
           st === "resolved" || st === "dismissed"
             ? "Caso cerrado: se avisó a quien reportó y se eliminaron las fotos."
             : body.assigned_to_id
-              ? "Validada y enviada a la cuadrilla: ya ve la ubicación exacta y los detalles."
+              ? "Enviada a la cuadrilla: ya ve la ubicación exacta y los detalles."
               : "Incidencia actualizada.",
       });
       refresh();
@@ -108,13 +108,63 @@ export default function IncidentDetailPage() {
         </div>
       </header>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-      {!closed && (
+      <section>
+        <h2 className="mb-3 text-subheading">Reportes ciudadanos ({reports.length})</h2>
+        {photos_purged_at && <Notice>Las fotos se eliminaron al cerrar el caso ({new Date(photos_purged_at).toLocaleDateString("es-MX")}).</Notice>}
+        <ul className="mt-3 space-y-3">
+          {reports.map((r) => (
+            <li key={r.id} className="rounded-card border border-line bg-card p-5">
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="min-w-[220px] flex-1">
+                  <p className="font-mono text-[12px] text-warm">
+                    {r.public_id} · {new Date(r.created_at).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })} · {r.reporter}
+                  </p>
+                  <p className="mt-1 font-medium text-ink">{r.title}</p>
+                  <p className="mt-1 text-body text-warm">{r.description}</p>
+                  <p className="mt-2 text-[12px] text-warm">
+                    {label(SEVERITY_LABELS, r.severity)} · {r.leak_flow ? label(FLOW_LABELS, r.leak_flow) : "tipo de fuga sin dato"}
+                    {r.address_reference ? ` · ${r.address_reference}` : ""}
+                  </p>
+                </div>
+                <StatusTag status={r.status} />
+              </div>
+              {r.photos.length > 0 && (
+                <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  {r.photos.map((p, i) => (
+                    <AuthImage key={p.id} reportId={r.id} photoId={p.id} alt={`Foto ${i + 1} del reporte ${r.public_id}`} />
+                  ))}
+                </div>
+              )}
+              {(r.status === "received" || r.status === "under_review") && (
+                <div className="mt-4 flex gap-2">
+                  <Button variant="primary" onClick={() => review.mutate({ rid: r.id, status: "validated" })}>
+                    Validar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const reason = window.prompt("Motivo del rechazo (se comunica a quien reportó):");
+                      if (reason && reason.trim().length >= 5) review.mutate({ rid: r.id, status: "rejected", reason: reason.trim() });
+                      else if (reason !== null) setMsg({ tone: "error", text: "El motivo debe tener al menos 5 caracteres." });
+                    }}
+                  >
+                    Rechazar
+                  </Button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+      {!closed && !inc.validated && (
+        <Notice>Primero valida el reporte. Después podrás asignarlo a una cuadrilla.</Notice>
+      )}
+      {!closed && inc.validated && (
         <section className="anim-pop rounded-card border border-cyan/30 bg-sky/30 p-5">
-          <h2 className="text-subheading">{inc.assigned_to ? "En atención por cuadrilla" : "Validar y enviar a cuadrilla"}</h2>
+          <h2 className="text-subheading">{inc.assigned_to ? "En atención por cuadrilla" : "Asignar a cuadrilla"}</h2>
           <p className="mt-1 text-body text-warm">
             {inc.assigned_to
               ? `Asignada a ${inc.assigned_to.display_name}. La cuadrilla ve la ubicación exacta, las fotos y el teléfono de contacto, y la marca como atendida al terminar.`
-              : "Revisa los reportes y las fotos. Al enviar, los reportes pendientes quedan validados y la cuadrilla recibe la ubicación y los detalles."}
+              : "El reporte ya está validado. Elige la cuadrilla que va a atenderlo."}
           </p>
           <div className="mt-4 flex flex-wrap items-end gap-2">
             <label className="min-w-[240px] flex-1">
@@ -131,9 +181,9 @@ export default function IncidentDetailPage() {
             <Button
               variant="primary"
               disabled={!dispatchTo || patch.isPending}
-              onClick={() => patch.mutate({ assigned_to_id: dispatchTo, validate_reports: true })}
+              onClick={() => patch.mutate({ assigned_to_id: dispatchTo })}
             >
-              {inc.assigned_to ? "Reasignar" : "Validar y enviar"}
+              {inc.assigned_to ? "Reasignar" : "Enviar a cuadrilla"}
             </Button>
           </div>
         </section>
@@ -190,54 +240,6 @@ export default function IncidentDetailPage() {
           )}
         </Card>
       </div>
-
-      <section>
-        <h2 className="mb-3 text-subheading">Reportes ciudadanos ({reports.length})</h2>
-        {photos_purged_at && <Notice>Las fotos se eliminaron al cerrar el caso ({new Date(photos_purged_at).toLocaleDateString("es-MX")}).</Notice>}
-        <ul className="mt-3 space-y-3">
-          {reports.map((r) => (
-            <li key={r.id} className="rounded-card border border-line bg-card p-5">
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="min-w-[220px] flex-1">
-                  <p className="font-mono text-[12px] text-warm">
-                    {r.public_id} · {new Date(r.created_at).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })} · {r.reporter}
-                  </p>
-                  <p className="mt-1 font-medium text-ink">{r.title}</p>
-                  <p className="mt-1 text-body text-warm">{r.description}</p>
-                  <p className="mt-2 text-[12px] text-warm">
-                    {label(SEVERITY_LABELS, r.severity)} · {r.leak_flow ? label(FLOW_LABELS, r.leak_flow) : "tipo de fuga sin dato"}
-                    {r.address_reference ? ` · ${r.address_reference}` : ""}
-                  </p>
-                </div>
-                <StatusTag status={r.status} />
-              </div>
-              {r.photos.length > 0 && (
-                <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                  {r.photos.map((p, i) => (
-                    <AuthImage key={p.id} reportId={r.id} photoId={p.id} alt={`Foto ${i + 1} del reporte ${r.public_id}`} />
-                  ))}
-                </div>
-              )}
-              {(r.status === "received" || r.status === "under_review") && (
-                <div className="mt-4 flex gap-2">
-                  <Button variant="primary" onClick={() => review.mutate({ rid: r.id, status: "validated" })}>
-                    Validar
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const reason = window.prompt("Motivo del rechazo (se comunica a quien reportó):");
-                      if (reason && reason.trim().length >= 5) review.mutate({ rid: r.id, status: "rejected", reason: reason.trim() });
-                      else if (reason !== null) setMsg({ tone: "error", text: "El motivo debe tener al menos 5 caracteres." });
-                    }}
-                  >
-                    Rechazar
-                  </Button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
 
       <section>
         <h2 className="mb-3 text-subheading">Historial</h2>
