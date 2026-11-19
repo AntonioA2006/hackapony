@@ -299,7 +299,7 @@ El mapa público es el endpoint más consultado y el más expuesto. Se separa de
 
 Se muestra una incidencia en cuanto tiene **≥ 1 reporte en `under_review` o `validated`**, con badge "sin validar" si ninguno está validado. Las incidencias con un único reporte de una cuenta de menos de 24 h **no** se publican hasta validación. Equilibra utilidad (la gente ve que su reporte "existe") contra abuso (cuentas recién creadas sembrando el mapa).
 
-D5 no cambia esta regla: el código sigue exigiendo al menos un reporte en `validated`.
+En el código, un reporte de fuga se publica en cuanto se envía (`received` incluido). `awaiting_validation` es verdadero mientras ninguno de sus reportes esté `validated`. Un reporte `rejected` no mantiene el punto en el mapa. La regla de las cuentas de menos de 24 h no está hecha.
 
 ### 8.4 Fotografías
 

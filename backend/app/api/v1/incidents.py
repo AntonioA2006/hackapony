@@ -34,7 +34,7 @@ def _incident_coords(db: Session, inc: Incident) -> tuple[float, float]:
     return row[0], row[1]
 
 
-def _public_out(inc: Incident, lat: float, lon: float) -> PublicIncidentOut:
+def _public_out(inc: Incident, lat: float, lon: float, *, awaiting_validation: bool = False) -> PublicIncidentOut:
     return PublicIncidentOut(
         id=str(inc.id),
         public_id=inc.public_id,
@@ -46,6 +46,7 @@ def _public_out(inc: Incident, lat: float, lon: float) -> PublicIncidentOut:
         longitude=lon,
         report_count=inc.report_count,
         confirmation_count=inc.confirmation_count,
+        awaiting_validation=awaiting_validation,
     )
 
 
@@ -76,17 +77,26 @@ def public_incidents(
             min_lon, min_lat, max_lon, max_lat = parse_bbox(bbox)
         except BBoxError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    validated_incident_ids = (
+    # Un reporte entra al mapa en cuanto se envía. Solo se oculta si fue rechazado
+    # o si la incidencia ya se cerró. awaiting_validation avisa que ningún reporte
+    # vinculado pasó por validación de un administrador.
+    publishable_incident_ids = (
         select(Report.incident_id)
         .where(
             Report.incident_id.isnot(None),
-            Report.status == ReportStatus.validated,
+            Report.status != ReportStatus.rejected,
         )
         .distinct()
     )
+    has_validated = (
+        select(Report.id)
+        .where(Report.incident_id == Incident.id, Report.status == ReportStatus.validated)
+        .correlate(Incident)
+        .exists()
+    )
     q = select(Incident).where(
         Incident.status.notin_([IncidentStatus.dismissed, IncidentStatus.resolved]),
-        Incident.id.in_(validated_incident_ids),
+        Incident.id.in_(publishable_incident_ids),
     )
     if cve_ent or cvegeo:
         q = q.join(Municipality, Municipality.id == Incident.municipality_id)
@@ -107,14 +117,14 @@ def public_incidents(
     pub_lat = func.ST_Y(cast(Incident.public_location, Geometry)).label("pub_lat")
     pub_lon = func.ST_X(cast(Incident.public_location, Geometry)).label("pub_lon")
     rows = db.execute(
-        q.add_columns(pub_lat, pub_lon)
+        q.add_columns(pub_lat, pub_lon, has_validated.label("has_validated"))
         .order_by(Incident.urgency_score.desc(), Incident.id)
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
     response.headers["Cache-Control"] = "public, max-age=30"
     return PaginatedResponse(
-        items=[_public_out(inc, lat, lon) for inc, lat, lon in rows],
+        items=[_public_out(inc, lat, lon, awaiting_validation=not validated) for inc, lat, lon, validated in rows],
         page=page,
         page_size=page_size,
         total=total,

@@ -16,6 +16,7 @@ class PublicIncidentOut(BaseModel):
     longitude: float
     report_count: int
     confirmation_count: int
+    awaiting_validation: bool = False
 
 
 class IncidentOut(PublicIncidentOut):

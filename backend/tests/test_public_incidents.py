@@ -60,6 +60,25 @@ def _bbox_around(lat: float, lon: float, pad: float = 0.02) -> str:
     return f"{lon - pad},{lat - pad},{lon + pad},{lat + pad}"
 
 
+def test_rejected_report_leaves_the_public_map(client):
+    lat, lon = 19.5, -99.2
+    _, citizen = _make_user()
+    _, admin = _make_user(UserRole.ADMINISTRADOR)
+    created = client.post("/api/v1/reports", headers=_auth(citizen), json=_report_payload(lat, lon))
+    assert created.status_code == 201, created.text
+    incident_id = created.json()["incident_id"]
+    visible = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
+    assert any(item["id"] == incident_id for item in visible.json()["items"])
+    rejected = client.patch(
+        f"/api/v1/reports/{created.json()['id']}",
+        headers=_auth(admin),
+        json={"status": "rejected", "rejection_reason": "No corresponde a una fuga"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    after = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
+    assert all(item["id"] != incident_id for item in after.json()["items"])
+
+
 def test_invalid_bbox_is_422(client):
     cases = {
         "no": "minLon,minLat,maxLon,maxLat",
@@ -77,7 +96,8 @@ def test_invalid_bbox_is_422(client):
 
 
 def test_public_map_hides_exact_point_and_filters_by_published_bbox(client):
-    lat, lon = CDMX
+    # Lejos del reporte demo de CDMX: si cae en su radio de agrupamiento, se une a una incidencia ya validada.
+    lat, lon = 20.15, -100.35
     _, citizen = _make_user()
     _, admin = _make_user(UserRole.ADMINISTRADOR)
     created = client.post("/api/v1/reports", headers=_auth(citizen), json=_report_payload(lat, lon))
@@ -86,9 +106,10 @@ def test_public_map_hides_exact_point_and_filters_by_published_bbox(client):
     incident_id = report["incident_id"]
     assert incident_id
 
-    hidden = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
-    assert hidden.status_code == 200, hidden.text
-    assert all(item["id"] != incident_id for item in hidden.json()["items"])
+    listed_early = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon)})
+    assert listed_early.status_code == 200, listed_early.text
+    early = next(item for item in listed_early.json()["items"] if item["id"] == incident_id)
+    assert early["awaiting_validation"] is True
 
     validated = client.patch(
         f"/api/v1/reports/{report['id']}",
@@ -100,6 +121,7 @@ def test_public_map_hides_exact_point_and_filters_by_published_bbox(client):
     listed = client.get("/api/v1/incidents/public", params={"bbox": _bbox_around(lat, lon), "page_size": 50})
     assert listed.status_code == 200, listed.text
     match = next(item for item in listed.json()["items"] if item["id"] == incident_id)
+    assert match["awaiting_validation"] is False
     expected = public_coordinates(report["latitude"], report["longitude"], incident_id)
     assert match["latitude"] == pytest.approx(expected[0], abs=1e-6)
     assert match["longitude"] == pytest.approx(expected[1], abs=1e-6)

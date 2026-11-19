@@ -57,7 +57,7 @@ def list_states(response: Response, db: Session = Depends(get_db)):
                    w.viviendas, w.con_agua_entubada, w.sin_agua_entubada, w.con_tinaco, w.con_cisterna,
                    (SELECT count(*) FROM incidents i JOIN municipalities m ON m.id = i.municipality_id
                      WHERE m.cve_ent = s.cve_ent AND i.status NOT IN ('resolved', 'dismissed')
-                       AND EXISTS (SELECT 1 FROM reports r WHERE r.incident_id = i.id AND r.status = 'validated')
+                       AND EXISTS (SELECT 1 FROM reports r WHERE r.incident_id = i.id AND r.status <> 'rejected')
                    ) AS open_incidents
             FROM states s
             LEFT JOIN water_indicators w ON w.cvegeo = s.cve_ent
