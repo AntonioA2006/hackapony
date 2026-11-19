@@ -16,7 +16,7 @@ if (-not $ip) {
     $ip = "localhost"
 }
 
-Write-Host "Construyendo y levantando servicios..." -ForegroundColor Cyan
+Write-Host "Construyendo y levantando servicios (migrate aplica Alembic y el paquete INEGI antes de la API)..." -ForegroundColor Cyan
 docker compose up -d --build db api web
 
 Write-Host "Sembrando usuarios y demo de mapa..." -ForegroundColor Cyan

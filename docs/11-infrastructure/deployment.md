@@ -29,22 +29,11 @@ JSON stdout; agregador (Loki/CloudWatch) propuesto.
 
 ## Migraciones
 
-Pipeline: backup → `alembic upgrade` → smoke tests `/health`.
+En Compose el servicio `migrate` ejecuta `alembic upgrade head` y después `python -m scripts.load_inegi_seed`, cuando Postgres ya está healthy. `api` arranca solo si ese servicio termina con éxito (`depends_on: condition: service_completed_successfully`). La API no migra al iniciar. Definición: `docker-compose.yml`.
 
-Ejemplo compose (solo documentación):
+Fuera de Compose (CI o el anfitrión): `cd backend && alembic upgrade head && python -m scripts.load_inegi_seed`.
 
-```yaml
-# docs-only reference — implementar en Fase 1
-services:
-  db:
-    image: postgis/postgis:16-3.4
-  api:
-    build: ./backend
-    environment:
-      DATABASE_URL: postgresql+psycopg://agua:agua@db:5432/agua_alerta
-  web:
-    build: ./frontend
-```
+Pipeline de release: backup → `migrate` → smoke tests `/health` y `/health/ready`.
 
 ## Escalado post-MVP
 

@@ -1,0 +1,27 @@
+# Desarrollo local. `docker compose up` lo fusiona solo.
+# nginx sigue en :3080 y :8081 (servicio web del archivo base).
+# Staging o demo sin recarga ni Postgres en el host:
+#   docker compose -f docker-compose.yml up -d --build
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  migrate:
+    volumes:
+      - ./backend:/app
+
+  api:
+    volumes:
+      - ./backend:/app
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --proxy-headers
+      - --forwarded-allow-ips=*
