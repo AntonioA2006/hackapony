@@ -5,14 +5,14 @@ services:
     name: agua-alerta-api
     runtime: docker
     plan: free
-    region: oregon
+    region: ohio # misma región que Supabase (us-east-2): menos latencia a la BD
     rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      # PostgreSQL + PostGIS (Supabase: Connect → Session pooler → URI)
+      # PostgreSQL + PostGIS en Supabase, usuario dedicado agua_app vía session pooler (puerto 5432)
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
@@ -27,18 +27,14 @@ services:
         value: https://agua-alerta-mx.web.app,https://agua-alerta-mx.firebaseapp.com
       - key: CORS_ORIGIN_REGEX
         value: ^https://agua-alerta-mx(--[a-z0-9-]+)?\.web\.app$
-      # Fotos en Supabase Storage (API compatible con S3)
+      # Fotos en Supabase Storage (API REST con la clave de servicio; bucket privado report-photos)
       - key: STORAGE_BACKEND
-        value: s3
+        value: supabase
       - key: S3_BUCKET
         value: report-photos
-      - key: S3_ENDPOINT_URL
-        sync: false
-      - key: S3_REGION
-        sync: false
-      - key: S3_ACCESS_KEY_ID
-        sync: false
-      - key: S3_SECRET_ACCESS_KEY
+      - key: SUPABASE_URL
+        value: https://rvhhlhbzgjdfndlgxfxf.supabase.co
+      - key: SUPABASE_SERVICE_KEY
         sync: false
       # Correo de quien administra; entra con Firebase usando ese correo (verificado)
       - key: BOOTSTRAP_SUPERADMIN_EMAIL

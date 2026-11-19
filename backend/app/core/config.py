@@ -27,13 +27,15 @@ class Settings(BaseSettings):
         r"|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$"
     )
 
-    # Almacenamiento de fotos: "local" (volumen) o "s3" (Supabase Storage, Cloudflare R2, MinIO…)
+    # Almacenamiento de fotos: "local" (volumen), "supabase" (REST + clave de servicio) o "s3" (R2, MinIO…)
     storage_backend: str = "local"
     s3_endpoint_url: str | None = None
     s3_region: str = "us-east-1"
     s3_bucket: str = "report-photos"
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
+    supabase_url: str | None = None
+    supabase_service_key: str | None = None
 
     # Firebase Authentication: si se define, la API acepta ID tokens de Firebase (además del JWT propio)
     firebase_project_id: str | None = None
