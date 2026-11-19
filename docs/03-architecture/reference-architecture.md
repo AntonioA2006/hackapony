@@ -1,7 +1,7 @@
 # Arquitectura de referencia — Agua Alerta (revisión senior)
 
 > **Propósito:** consolidar la especificación existente en una arquitectura ejecutable, tomar las decisiones que quedaron abiertas y corregir los puntos débiles detectados antes de escribir código.
-> **Estado:** revisado contra `claude/lucid-lamport-mer5mm` (`08c6ce2`: Firebase Auth, cobertura nacional INEGI, purga de fotos) más H7, D8 y H9. La sección [15](#15-estado-del-código-actual-frente-a-esta-arquitectura) indica, para cada punto, si el código ya lo cumple, lo cumple a medias o lo contradice.
+> **Estado:** revisado contra `claude/lucid-lamport-mer5mm` (`173b35d`: Firebase Auth, cobertura nacional INEGI, purga de fotos, refresh con cookie y Supabase) más H7, D8 y H9. La sección [15](#15-estado-del-código-actual-frente-a-esta-arquitectura) indica, para cada punto, si el código ya lo cumple, lo cumple a medias o lo contradice.
 > **Relación con otros documentos:** este documento **no reemplaza** a los canónicos (diccionario de datos, endpoints, algoritmo de urgencia); los **complementa** y, donde hay conflicto, propone el cambio explícitamente en la sección [Hallazgos sobre la especificación actual](#12-hallazgos-sobre-la-especificación-actual) y como ADR nuevo.
 
 ---
@@ -427,7 +427,7 @@ Regla para extraer un módulo a servicio: solo cuando tenga **un equipo, un ritm
 
 ## 15. Estado del código actual frente a esta arquitectura
 
-Revisión sobre `claude/lucid-lamport-mer5mm` (`08c6ce2`), con H7, D8 y H9 aplicados. Esa rama no incluye el commit `3d8790d` de `main` (refresh en cookie HttpOnly); el camino de producción es Firebase Auth y el JWT local queda como modo de desarrollo. Leyenda: ✅ cumple · 🟡 parcial · ❌ pendiente o contradice.
+Revisión sobre `claude/lucid-lamport-mer5mm` (`173b35d`), con H7, D8 y H9 aplicados. El camino de producción es Firebase Auth. El JWT local conserva refresh en cookie HttpOnly, rotación y logout que revoca. Leyenda: ✅ cumple · 🟡 parcial · ❌ pendiente o contradice.
 
 ### 15.1 Hallazgos de §12 confirmados en el código
 
@@ -438,7 +438,7 @@ Revisión sobre `claude/lucid-lamport-mer5mm` (`08c6ce2`), con H7, D8 y H9 aplic
 | H3 | ❌ | `app/services/priority.py` solo recalcula en eventos; no hay job periódico ni desglose persistido | Job en worker cada 15 min + columnas `urgency_breakdown`, `urgency_version` |
 | H6 | 🟡 | `app/core/rate_limit.py` guarda contadores en memoria del proceso. Login limitado (5/15 min por email y 20/15 min por IP); registro y `password-reset/request` también (5/15 min) | Contadores en PostgreSQL para que el límite valga con varias réplicas (§9) |
 | H7 | ✅ corregido | Servicio `migrate` (`alembic upgrade head` y `python -m scripts.load_inegi_seed`, `restart: "no"`). `api` depende de `db` healthy y de `migrate` con `service_completed_successfully`. El `CMD` de la API ya no migra | — |
-| H8 | 🟡 | Con `VITE_FIREBASE_*` y `FIREBASE_PROJECT_ID`, el SPA usa Firebase Auth y la API verifica el ID token (`firebase_auth.py`) y crea o vincula `users.firebase_uid`. El modo local (Vite sin esas variables) sigue guardando el access token en `localStorage`; `POST /auth/logout` no revoca nada y no hay `POST /auth/refresh` | En modo local, no persistir el refresh y revocar la sesión; en Firebase, la sesión la gestiona el SDK |
+| H8 | 🟡 | Con `VITE_FIREBASE_*` y `FIREBASE_PROJECT_ID`, el SPA usa Firebase Auth y la API verifica el ID token (`firebase_auth.py`). En modo local hay cookie HttpOnly `agua_refresh`, `POST /auth/refresh` rota el token y `POST /auth/logout` lo revoca. El SPA además guarda el refresh en `localStorage` (`client.ts`) | Dejar el refresh solo en la cookie; en Firebase, la sesión la gestiona el SDK |
 | H9 | ✅ corregido | `tileConfig.ts`: `VITE_MAP_TILE_URL` / `VITE_MAP_TILE_ATTRIBUTION`, con alias `VITE_TILE_*`. Vacías → Esri World Light Gray. El build de `web` las recibe como build args y no pisa `frontend/.env.production` si vienen vacías | En staging/prod usar un proveedor permitido; el default de esta rama sigue siendo Esri |
 | H10 | ✅ corregido | `photos.sanitize_image` valida el contenido con Pillow y re-codifica (descarta EXIF). Los reportes pasan por `sanitize_photo` | — |
 | H11 | 🟡 | `corroboration_confirmation_count` excluye a quien ya reportó; las confirmaciones son únicas por usuario. `report_count` sigue siendo el número de filas de reportes, no de usuarios verificados distintos | Contar usuarios distintos en el factor de reportes |
@@ -478,7 +478,7 @@ Revisión sobre `claude/lucid-lamport-mer5mm` (`08c6ce2`), con H7, D8 y H9 aplic
 ### 15.4 Orden de trabajo recomendado
 
 1. ~~**D1, D2, D3, D9, H1**: correctitud de datos~~ ✅ corregidos, con tests de integración en `backend/tests/test_grouping_integrity.py`.
-2. ~~**H10, D4**~~ ✅. **H6** sigue en memoria. **H8** en producción pasa por Firebase; el modo local aún no revoca la sesión.
+2. ~~**H10, D4**~~ ✅. **H6** sigue en memoria. **H8** en producción pasa por Firebase; el modo local ya rota y revoca, y todavía copia el refresh a `localStorage`.
 3. ~~**H7, D8, H9**~~ ✅. `compose.override.yml` es el modo local; el archivo base es el de demo/staging. `migrate` aplica el esquema y el paquete INEGI. Las tiles salen por `VITE_MAP_TILE_*`.
-4. **H2, H3, H13, D5**: `anchor_location`, `public_location`, desglose de urgencia, idempotencia y read model público. `002` y `003` ya están usadas.
+4. **H2, H3, H13, D5**: `anchor_location`, `public_location`, desglose de urgencia, idempotencia y read model público. `002`, `003` y `004` ya están usadas.
 5. Reorganizar el backend por módulos (§4) de forma incremental, empezando por extraer `territory`.
