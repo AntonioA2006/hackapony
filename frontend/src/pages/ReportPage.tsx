@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, authHeader, getApiBase } from "../shared/api/client";
-import { CATEGORY_LABELS, SEVERITY_LABELS } from "../shared/labels";
+import { CATEGORY_LABELS, FLOW_RATE_LPH, SEVERITY_LABELS } from "../shared/labels";
 import IncidentsMap from "../shared/map/IncidentsMap";
 import { isInsideMexico, useMexicoOutline, useMunicipalities, useStates } from "../shared/region/api";
 import { useRegion } from "../shared/region/RegionContext";
@@ -27,6 +27,7 @@ export default function ReportPage() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("leak_public_road");
   const [severity, setSeverity] = useState("medium");
+  const [flow, setFlow] = useState<string | null>(null);
   const [point, setPoint] = useState<[number, number] | null>(null);
   const [address, setAddress] = useState("");
   // La dirección se autocompleta desde el punto mientras la persona no la edite a mano
@@ -173,6 +174,7 @@ export default function ReportPage() {
           latitude: point[0],
           longitude: point[1],
           address_reference: address || null,
+          leak_flow: flow,
         }),
       });
       let failed = 0;
@@ -223,6 +225,7 @@ export default function ReportPage() {
               setPoint(null);
               setAddress("");
               setAddressAuto(true);
+              setFlow(null);
             }}
           >
             Hacer otro reporte
@@ -268,6 +271,33 @@ export default function ReportPage() {
                 </label>
               ))}
             </div>
+          </fieldset>
+          <fieldset>
+            <legend className="label">¿Cómo sale el agua? (opcional)</legend>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { k: "goteo", t: "Goteo", d: "Gotas constantes", icon: "💧" },
+                { k: "chorro", t: "Chorro", d: "Flujo continuo", icon: "🚿" },
+                { k: "inundacion", t: "Inundación", d: "Encharca la calle", icon: "🌊" },
+              ].map((o) => (
+                <label
+                  key={o.k}
+                  className={`press cursor-pointer rounded-card border p-3 text-center transition-colors ${
+                    flow === o.k ? "border-cyan bg-sky/50 shadow-subtle" : "border-line bg-card hover:border-muted"
+                  }`}
+                >
+                  <input type="radio" name="flow" value={o.k} className="sr-only" checked={flow === o.k} onChange={() => setFlow(o.k)} onClick={() => flow === o.k && setFlow(null)} />
+                  <span className="block text-xl" aria-hidden>
+                    {o.icon}
+                  </span>
+                  <span className="block text-[13px] font-medium text-ink">{o.t}</span>
+                  <span className="block text-[11px] text-warm">
+                    {o.d} · ~{FLOW_RATE_LPH[o.k].toLocaleString("es-MX")} L/h
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="hint">Nos ayuda a estimar cuánta agua se pierde mientras no se atiende.</p>
           </fieldset>
           <Field label="Título" hint="Ejemplo: Fuga constante frente al mercado" error={show("title")} htmlFor="rep-title" aside={`${title.trim().length}/120`}>
             <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} {...fieldA11y("rep-title", show("title"))} />

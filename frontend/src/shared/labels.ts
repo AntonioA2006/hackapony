@@ -38,3 +38,27 @@ export const label = (map: Record<string, string>, key: string | null | undefine
 export const fmtInt = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("es-MX"));
 export const fmtPct = (n: number | null | undefined) =>
   n == null ? "Sin dato" : `${n.toLocaleString("es-MX", { maximumFractionDigits: 1 })} %`;
+
+export const FLOW_LABELS: Record<string, string> = {
+  goteo: "Goteo",
+  chorro: "Chorro",
+  inundacion: "Inundación",
+  sin_dato: "Sin dato",
+};
+
+/** Caudales de referencia (deben coincidir con backend/app/domain/waste.py). */
+export const FLOW_RATE_LPH: Record<string, number> = { goteo: 5, chorro: 600, inundacion: 6000 };
+
+export const fmtLiters = (l: number | null | undefined) => {
+  if (l == null) return "—";
+  if (l >= 1_000_000) return `${(l / 1_000_000).toLocaleString("es-MX", { maximumFractionDigits: 1 })} millones de L`;
+  if (l >= 1000) return `${(l / 1000).toLocaleString("es-MX", { maximumFractionDigits: 1 })} m³`;
+  return `${Math.round(l).toLocaleString("es-MX")} L`;
+};
+
+export const fmtHours = (h: number | null | undefined) => {
+  if (h == null) return "—";
+  if (h < 1) return `${Math.round(h * 60)} min`;
+  if (h < 48) return `${h.toLocaleString("es-MX", { maximumFractionDigits: 1 })} h`;
+  return `${(h / 24).toLocaleString("es-MX", { maximumFractionDigits: 1 })} días`;
+};

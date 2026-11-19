@@ -8,6 +8,10 @@ import { mapTileAttribution, mapTileUrl } from "./tileConfig";
 import { BAND_COLORS, BAND_RADIUS, waterColor } from "./waterScale";
 
 export type MapIncident = {
+  validated?: boolean;
+  leak_flow?: string | null;
+  state_name?: string | null;
+  municipality_name?: string | null;
   id: string;
   public_id: string;
   latitude: number;
@@ -69,7 +73,23 @@ type Props = {
   onPick?: (lat: number, lon: number) => void;
   className?: string;
   onConfirm?: (id: string) => void;
+  /** Ubicación exacta a enfocar (desde un reporte o incidencia): vuela ahí con marcador pulsante. */
+  focus?: { lat: number; lon: number; id?: string | null } | null;
+  /** Color por región (id de estado o municipio) para la capa de incidencias del personal. */
+  regionColors?: Record<string, string> | null;
+  /** Enlace a la ficha del personal desde el popup. */
+  detailHref?: (id: string) => string;
 };
+
+const focusIcon = L.divIcon({ className: "", iconSize: [22, 22], iconAnchor: [11, 11], html: '<div class="aa-focus-pin"></div>' });
+
+function FlyTo({ focus }: { focus?: Props["focus"] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (focus) map.flyTo([focus.lat, focus.lon], 17, { duration: 1.2 });
+  }, [map, focus?.lat, focus?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
 
 function FitBounds({ bounds }: { bounds?: LatLngBoundsExpression | null }) {
   const map = useMap();
@@ -118,14 +138,29 @@ export default function IncidentsMap({
   onPick,
   className = "h-[62vh] min-h-[420px]",
   onConfirm,
+  focus,
+  regionColors,
+  detailHref,
 }: Props) {
   const regionKey = useMemo(
-    () => (regions ? `${regions.features.length}-${regions.features[0]?.properties.id}-${selectedRegionId}` : "none"),
-    [regions, selectedRegionId],
+    () =>
+      regions
+        ? `${regions.features.length}-${regions.features[0]?.properties.id}-${selectedRegionId}-${regionColors ? Object.keys(regionColors).length + JSON.stringify(regionColors).length : "agua"}`
+        : "none",
+    [regions, selectedRegionId, regionColors],
   );
 
   const style = (feature?: Feature<Geometry, { id: string; water: Water }>): PathOptions => {
     const selected = feature?.properties.id === selectedRegionId;
+    if (regionColors) {
+      const c = feature ? regionColors[feature.properties.id] : undefined;
+      return {
+        fillColor: c ?? "#ffffff",
+        fillOpacity: c ? 0.62 : 0.15,
+        color: selected ? "#0b2338" : "#c9d5e0",
+        weight: selected ? 2 : 0.8,
+      };
+    }
     return {
       fillColor: waterColor(feature?.properties.water?.pct_sin_agua_entubada),
       fillOpacity: 0.72,
@@ -145,11 +180,13 @@ export default function IncidentsMap({
       maxBoundsViscosity={0.9}
       minZoom={4}
     >
-      <TileLayer attribution={mapTileAttribution()} url={mapTileUrl()} maxZoom={16} />
+      <TileLayer attribution={mapTileAttribution()} url={mapTileUrl()} maxNativeZoom={16} maxZoom={19} />
       <Pane name="mask" style={{ zIndex: 340 }} />
       <Pane name="regions" style={{ zIndex: 350 }} />
       <OutsideMexicoMask />
-      <FitBounds bounds={bounds} />
+      <FitBounds bounds={focus ? null : bounds} />
+      <FlyTo focus={focus} />
+      {focus && <Marker position={[focus.lat, focus.lon]} icon={focusIcon} zIndexOffset={1000} />}
       {regions && (
         <GeoJSON
           key={regionKey}
@@ -172,20 +209,35 @@ export default function IncidentsMap({
           center={[inc.latitude, inc.longitude]}
           radius={BAND_RADIUS[inc.priority_band] ?? 6}
           pathOptions={{
-            color: "#ffffff",
+            color: inc.validated === false ? "#0b2338" : "#ffffff",
             weight: 2,
-            fillColor: BAND_COLORS[inc.priority_band] ?? "#7fa3bf",
+            dashArray: inc.validated === false ? "3 3" : undefined,
+            fillColor: BAND_COLORS[inc.priority_band] ?? "#94a3b4",
             fillOpacity: 0.95,
+          }}
+          eventHandlers={{
+            add: (e) => {
+              if (focus?.id && focus.id === inc.id) setTimeout(() => e.target.openPopup(), 1300);
+            },
           }}
         >
           <Popup>
             <div className="space-y-1 text-[13px]">
               <p className="font-mono text-[12px] text-warm">{inc.public_id}</p>
               <p className="font-medium text-ink">{label(CATEGORY_LABELS, inc.primary_category)}</p>
+              {(inc.municipality_name || inc.state_name) && (
+                <p className="text-warm">{[inc.municipality_name, inc.state_name].filter(Boolean).join(", ")}</p>
+              )}
+              {inc.validated === false && <p className="text-[12px] font-medium text-[#7a5a05]">Sin validar todavía</p>}
               <p className="text-warm">
                 Prioridad {label(BAND_LABELS, inc.priority_band).toLowerCase()} · {inc.report_count} reporte(s) ·{" "}
                 {inc.confirmation_count} confirmación(es)
               </p>
+              {detailHref && (
+                <a href={detailHref(inc.id)} className="mr-2 inline-block rounded-full bg-cyan px-3 py-1 text-[12px] font-medium text-white">
+                  Abrir ficha
+                </a>
+              )}
               {onConfirm && (
                 <button
                   type="button"

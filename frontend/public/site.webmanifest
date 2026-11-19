@@ -1,0 +1,14 @@
+{
+  "name": "Agua Alerta",
+  "short_name": "Agua Alerta",
+  "description": "Reporta fugas y problemas de agua potable en México.",
+  "lang": "es-MX",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f9fc",
+  "theme_color": "#0b2338",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

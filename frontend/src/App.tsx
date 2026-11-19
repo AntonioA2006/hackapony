@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from "react";
-import { Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./shared/auth/AuthContext";
+import { isStaff, isSupervisor, ROLE_LABELS } from "./shared/roles";
 import { Button, ButtonLink, Spinner } from "./shared/ui";
 import AuthActionPage from "./pages/AuthActionPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -11,8 +12,11 @@ import RegisterPage from "./pages/RegisterPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import LocationConsentDialog from "./shared/region/LocationConsentDialog";
 
-// El panel administrativo va en un bundle aparte: el ciudadano no lo descarga.
-const AdminPage = lazy(() => import("./pages/AdminPage"));
+// Las vistas del personal van en bundles aparte: el ciudadano no las descarga.
+const StaffDashboardPage = lazy(() => import("./pages/staff/StaffDashboardPage"));
+const IncidentsQueuePage = lazy(() => import("./pages/staff/IncidentsQueuePage"));
+const IncidentDetailPage = lazy(() => import("./pages/staff/IncidentDetailPage"));
+const TeamPage = lazy(() => import("./pages/staff/TeamPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const MyReportsPage = lazy(() => import("./pages/MyReportsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
@@ -35,14 +39,25 @@ const navLink = ({ isActive }: { isActive: boolean }) =>
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
-  const isAdmin = user && (user.role === "ADMINISTRADOR" || user.role === "SUPERADMINISTRADOR");
+  const staff = isStaff(user?.role);
   const links = (
     <>
+      {staff && (
+        <>
+          <NavLink to="/panel" end className={navLink} onClick={() => setOpen(false)}>
+            Panel
+          </NavLink>
+          <NavLink to="/panel/incidencias" className={navLink} onClick={() => setOpen(false)}>
+            Incidencias
+          </NavLink>
+        </>
+      )}
       <NavLink to="/mapa" className={navLink} onClick={() => setOpen(false)}>
         Mapa
       </NavLink>
-      {user && (
+      {user && !staff && (
         <>
           <NavLink to="/mis-reportes" className={navLink} onClick={() => setOpen(false)}>
             Mis reportes
@@ -50,12 +65,12 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NavLink to="/tablero" className={navLink} onClick={() => setOpen(false)}>
             Tablero
           </NavLink>
-          {isAdmin && (
-            <NavLink to="/admin" className={navLink} onClick={() => setOpen(false)}>
-              Administración
-            </NavLink>
-          )}
         </>
+      )}
+      {isSupervisor(user?.role) && (
+        <NavLink to="/panel/equipo" className={navLink} onClick={() => setOpen(false)}>
+          Equipo
+        </NavLink>
       )}
     </>
   );
@@ -69,8 +84,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           <div className="ml-auto hidden items-center gap-2 md:flex">
             {user ? (
               <>
-                <NavLink to="/perfil" className={navLink}>
+                <NavLink to="/perfil" className={navLink} title={ROLE_LABELS[user.role]}>
                   {user.display_name}
+                  {staff && <span className="ml-1.5 rounded-full bg-sky px-1.5 text-[10px] font-medium text-cyan-edge">{ROLE_LABELS[user.role]}</span>}
                 </NavLink>
                 <button type="button" onClick={() => void logout()} className="px-3 text-body text-warm hover:text-ink">
                   Salir
@@ -130,7 +146,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </header>
-      <main className="mx-auto w-full max-w-page flex-1 px-4 py-10 sm:px-6">{children}</main>
+      <main key={location.pathname} className="anim-page mx-auto w-full max-w-page flex-1 px-4 py-10 sm:px-6">
+        {children}
+      </main>
       <LocationConsentDialog />
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-page flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-warm sm:px-6">
@@ -146,6 +164,13 @@ function Shell({ children }: { children: React.ReactNode }) {
       </footer>
     </div>
   );
+}
+
+/** Solo personal (técnico o supervisión); `supervisor` restringe a supervisión. */
+function StaffRoute({ children, supervisor = false }: { children: React.ReactNode; supervisor?: boolean }) {
+  const { user } = useAuth();
+  const allowed = supervisor ? isSupervisor(user?.role) : isStaff(user?.role);
+  return <PrivateRoute>{allowed ? children : <Navigate to="/tablero" replace />}</PrivateRoute>;
 }
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -173,6 +198,12 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** El personal entra a su panel; la ciudadanía a su tablero. */
+function HomeForRole() {
+  const { user } = useAuth();
+  return isStaff(user?.role) ? <Navigate to="/panel" replace /> : <DashboardPage />;
+}
+
 export default function App() {
   const priv = (el: React.ReactNode) => <PrivateRoute>{el}</PrivateRoute>;
   return (
@@ -188,9 +219,13 @@ export default function App() {
           <Route path="/registro" element={<RegisterPage />} />
           <Route path="/reportar" element={priv(<ReportPage />)} />
           <Route path="/mis-reportes" element={priv(<MyReportsPage />)} />
-          <Route path="/tablero" element={priv(<DashboardPage />)} />
+          <Route path="/tablero" element={priv(<HomeForRole />)} />
           <Route path="/perfil" element={priv(<ProfilePage />)} />
-          <Route path="/admin" element={priv(<AdminPage />)} />
+          <Route path="/panel" element={<StaffRoute><StaffDashboardPage /></StaffRoute>} />
+          <Route path="/panel/incidencias" element={<StaffRoute><IncidentsQueuePage /></StaffRoute>} />
+          <Route path="/panel/incidencias/:id" element={<StaffRoute><IncidentDetailPage /></StaffRoute>} />
+          <Route path="/panel/equipo" element={<StaffRoute supervisor><TeamPage /></StaffRoute>} />
+          <Route path="/admin" element={<Navigate to="/panel" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
