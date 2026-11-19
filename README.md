@@ -13,17 +13,40 @@ MVP según `docs/`.
 ```bash
 # Abre Docker Desktop y espera a que el motor esté "running"
 cp .env.example .env   # Windows: copy .env.example .env
-docker compose up -d db
-cd backend && alembic upgrade head
+docker compose up -d --build
+docker compose exec api python -m scripts.seed_dev
+```
+
+Compose espera a que Postgres esté sano, corre el servicio **migrate** (`alembic upgrade head` y `python -m scripts.load_inegi_seed`) y solo entonces arranca la API. La API no migra al iniciar.
+
+- **Web equipo (nginx, LAN):** http://\<tu-IP\>:3080 — un solo puerto; API bajo `/api/v1`, docs en `/docs`
+- Web (Docker local): http://localhost:3080 o http://localhost:8081
+- API directa: http://localhost:8000/docs
+
+Esa imagen web entra con Firebase Auth (`frontend/.env.production`). `FIREBASE_PROJECT_ID` en `.env` tiene que ser el mismo proyecto (`agua-alerta-mx` en el ejemplo) para que la API acepte el ID token.
+
+`docker compose up` fusiona `compose.override.yml`: recarga de la API, el código de `backend/` montado en `api` y `migrate`, y Postgres en `127.0.0.1:5432`. El nginx de la demo sigue en **:3080**.
+
+Para el mismo stack sin ese modo de desarrollo:
+
+```bash
+docker compose -f docker-compose.yml up -d --build
+```
+
+Si añades una revisión de Alembic o regeneras el paquete INEGI y `migrate` ya terminó bien: `docker compose run --rm migrate`.
+
+### Desarrollo en el anfitrión
+
+Con Postgres publicado por el override (`docker compose up -d db`):
+
+```bash
+cd backend && alembic upgrade head && python -m scripts.load_inegi_seed
 cd backend && python -m scripts.seed_dev
 cd backend && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev
 ```
 
-- API: http://localhost:8000/docs
-- **Web equipo (nginx, LAN):** http://\<tu-IP\>:3080 — un solo puerto; API bajo `/api/v1`, docs en `/docs`
-- Web (Docker local): http://localhost:3080 o http://localhost:8081
-- Web (dev Vite): http://localhost:5173 — define `VITE_API_BASE_URL=http://localhost:8000/api/v1`
+- Web (dev Vite): http://localhost:5173 — `VITE_API_BASE_URL=http://localhost:8000/api/v1` en `frontend/.env.local`. Sin `VITE_FIREBASE_*`, este modo usa el login de la API.
 
 ### Tiles del mapa
 

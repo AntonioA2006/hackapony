@@ -28,6 +28,8 @@ cd C:\ruta\hackapony
 .\scripts\team-up.ps1
 ```
 
+`team-up.ps1` ejecuta `docker compose up -d --build`. El servicio `migrate` aplica Alembic y carga el paquete nacional de INEGI; tiene que terminar bien antes de que arranque la API. La API ya no migra al iniciar. La imagen de :3080 usa Firebase Auth.
+
 | Quién | URL |
 |-------|-----|
 | Anfitrión | http://localhost:3080 |
@@ -44,9 +46,12 @@ El servidor escucha en `0.0.0.0` (`vite.config.ts`).
 
 ```powershell
 .\scripts\configure-lan.ps1
+docker compose up -d db
 cd backend
-# con DB Docker:
+# Postgres en localhost lo publica compose.override.yml
 $env:DATABASE_URL="postgresql+psycopg://agua:agua_secret@localhost:5432/agua_alerta"
+alembic upgrade head
+python -m scripts.load_inegi_seed
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 cd ..\frontend
 npm run dev

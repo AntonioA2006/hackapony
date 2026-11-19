@@ -13,18 +13,10 @@ ARG VITE_FIREBASE_AUTH_DOMAIN
 ARG VITE_FIREBASE_PROJECT_ID
 ARG VITE_FIREBASE_APP_ID
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-# Vite da prioridad a las variables ya exportadas sobre frontend/.env.production.
-# Un ARG vacío borraría la config pública de Firebase, así que solo se escribe lo que trae valor.
-RUN sh -ec 'write() { if [ -n "$2" ]; then printf "%s=%s\n" "$1" "$2" >> .env.production.local; fi; }; \
-  write VITE_MAP_TILE_URL "$VITE_MAP_TILE_URL"; \
-  write VITE_MAP_TILE_ATTRIBUTION "$VITE_MAP_TILE_ATTRIBUTION"; \
-  write VITE_TILE_URL "$VITE_TILE_URL"; \
-  write VITE_TILE_ATTRIBUTION "$VITE_TILE_ATTRIBUTION"; \
-  write VITE_FIREBASE_API_KEY "$VITE_FIREBASE_API_KEY"; \
-  write VITE_FIREBASE_AUTH_DOMAIN "$VITE_FIREBASE_AUTH_DOMAIN"; \
-  write VITE_FIREBASE_PROJECT_ID "$VITE_FIREBASE_PROJECT_ID"; \
-  write VITE_FIREBASE_APP_ID "$VITE_FIREBASE_APP_ID"'
-RUN npm run build
+# Un build-arg vacío sigue existiendo en el entorno, y Vite lo prefiere sobre
+# frontend/.env.production (apagaría Firebase). En este shell se quitan los vacíos;
+# los que traen valor sustituyen al archivo de producción.
+RUN sh -ec 'for key in VITE_MAP_TILE_URL VITE_MAP_TILE_ATTRIBUTION VITE_TILE_URL VITE_TILE_ATTRIBUTION VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID; do val=$(printenv "$key" || true); if [ -z "$val" ]; then unset "$key"; fi; done; npm run build'
 
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
