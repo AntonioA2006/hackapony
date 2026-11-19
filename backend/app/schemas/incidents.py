@@ -1,8 +1,9 @@
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.domain.enums import IncidentStatus, LeakSeverity, PriorityBand, ReportCategory
+from app.domain.enums import IncidentStatus, LeakFlow, LeakSeverity, PriorityBand, ReportCategory
 
 
 class PublicIncidentOut(BaseModel):
@@ -16,18 +17,37 @@ class PublicIncidentOut(BaseModel):
     longitude: float
     report_count: int
     confirmation_count: int
+    validated: bool = False  # al menos un reporte validado por personal
+    leak_flow: LeakFlow | None = None
+    state_name: str | None = None
+    municipality_name: str | None = None
+    opened_at: datetime | None = None
+
+
+class AssigneeOut(BaseModel):
+    id: str
+    display_name: str
 
 
 class IncidentOut(PublicIncidentOut):
-    opened_at: datetime
     updated_at: datetime
     aggregated_severity: LeakSeverity
     municipality_id: str | None = None
+    cve_ent: str | None = None
+    cvegeo: str | None = None
+    closed_at: datetime | None = None
+    assigned_to: AssigneeOut | None = None
+    estimated_liters: float | None = None
 
 
 class IncidentPatch(BaseModel):
     status: IncidentStatus | None = None
     aggregated_severity: LeakSeverity | None = None
+    leak_flow: LeakFlow | None = None
+    # Supervisión: asignar a un técnico concreto. Técnico: solo `assign_to_me` / `unassign`.
+    assigned_to_id: uuid.UUID | None = None
+    assign_to_me: bool = False
+    unassign: bool = False
 
 
 class UrgencyBreakdownOut(BaseModel):

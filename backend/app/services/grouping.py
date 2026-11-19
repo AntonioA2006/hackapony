@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.domain.enums import LEAK_CATEGORIES, IncidentStatus, LeakSeverity, ReportCategory
+from app.domain.enums import FLOW_ORDER, LEAK_CATEGORIES, IncidentStatus, LeakFlow, LeakSeverity, ReportCategory
 from app.models.entities import Incident, IncidentHistory, Report
 from app.services.priority import recalculate_incident_urgency
 from app.services.spatial import assign_territorial_context, locate, point_wkt
@@ -72,11 +72,12 @@ def recalc_centroid(db: Session, incident: Incident) -> None:
     row = db.execute(
         text(
             """
-            SELECT ST_Y(c) AS lat, ST_X(c) AS lon, n, severities
+            SELECT ST_Y(c) AS lat, ST_X(c) AS lon, n, severities, flows
             FROM (
                 SELECT ST_Centroid(ST_Collect(location::geometry)) AS c,
                        count(*) AS n,
-                       array_agg(severity::text) AS severities
+                       array_agg(severity::text) AS severities,
+                       array_remove(array_agg(leak_flow::text), NULL) AS flows
                 FROM reports
                 WHERE incident_id = :iid
             ) agg
@@ -90,6 +91,8 @@ def recalc_centroid(db: Session, incident: Incident) -> None:
     incident.centroid = point_wkt(row.lat, row.lon)
     incident.report_count = row.n
     incident.aggregated_severity = LeakSeverity(max(row.severities, key=_SEVERITY_ORDER.index))
+    if row.flows:
+        incident.leak_flow = max((LeakFlow(f) for f in row.flows), key=FLOW_ORDER.index)
     incident.census_area_id, incident.municipality_id = locate(db, row.lat, row.lon)
 
 
@@ -127,6 +130,7 @@ def create_incident_for_report(
         opened_at=datetime.now(UTC),
         census_area_id=report.census_area_id,
         municipality_id=report.municipality_id,
+        leak_flow=report.leak_flow,
     )
     db.add(incident)
     db.flush()

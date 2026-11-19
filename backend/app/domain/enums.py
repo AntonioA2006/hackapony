@@ -2,9 +2,15 @@ import enum
 
 
 class UserRole(str, enum.Enum):
-    CIUDADANO = "CIUDADANO"
-    ADMINISTRADOR = "ADMINISTRADOR"
-    SUPERADMINISTRADOR = "SUPERADMINISTRADOR"
+    CIUDADANO = "CIUDADANO"  # reporta y consulta el estado de sus reportes
+    TECNICO = "TECNICO"  # atiende incidencias: valida, toma, atiende y resuelve
+    ADMINISTRADOR = "ADMINISTRADOR"  # heredado: mismas capacidades que TECNICO
+    SUPERADMINISTRADOR = "SUPERADMINISTRADOR"  # supervisión: todo + gestión de técnicos y asignación
+
+
+# Personal operativo (ve todas las incidencias, fotos y métricas)
+STAFF_ROLES = (UserRole.TECNICO, UserRole.ADMINISTRADOR, UserRole.SUPERADMINISTRADOR)
+SUPERVISOR_ROLES = (UserRole.SUPERADMINISTRADOR,)
 
 
 class ReportCategory(str, enum.Enum):
@@ -53,3 +59,13 @@ class PriorityBand(str, enum.Enum):
     high = "high"
     medium = "medium"
     low = "low"
+
+class LeakFlow(str, enum.Enum):
+    """Magnitud observada de la fuga: base del desperdicio estimado."""
+
+    goteo = "goteo"
+    chorro = "chorro"
+    inundacion = "inundacion"
+
+
+FLOW_ORDER = [LeakFlow.goteo, LeakFlow.chorro, LeakFlow.inundacion]
