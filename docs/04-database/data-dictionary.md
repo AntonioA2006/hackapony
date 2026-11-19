@@ -26,6 +26,8 @@ Convención: nombres en inglés en BD; etiquetas UI en español.
 | Campo | Descripción |
 |-------|-------------|
 | report_count | Reportes vinculados activos |
+| centroid | Punto operativo (media de los reportes). No se publica |
+| public_location | Punto del mapa público: snap ~30 m + jitter HMAC (ADR-016) |
 | confirmation_count | Corroboraciones ciudadanas |
 | urgency_score | 0–100, ver algoritmo |
 | priority_band | Banda derivada del score |

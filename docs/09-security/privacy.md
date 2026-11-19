@@ -7,8 +7,8 @@
 
 ## Ubicación
 
-- Precisión completa almacenada para operación.
-- **Propuesta futura:** jitter público 30 m.
+- Precisión completa almacenada para operación (admin y dueño del reporte).
+- El mapa público y `GET /reports/nearby` publican `public_location`: snap a ~30 m más un jitter determinista HMAC. Ver [ADR-016](../13-decisions/adr-016-ubicacion-publica.md).
 
 ## Datos personales
 

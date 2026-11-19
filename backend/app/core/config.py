@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # Superadministrador inicial: con solo el email, la persona entra vía Firebase con ese correo verificado
     bootstrap_superadmin_email: str | None = None
     bootstrap_superadmin_password: str | None = None
+    # Jitter de la ubicación pública (D5). Rotarlo no reescribe public_location ya guardada.
+    location_hmac_secret: str = "dev-location-hmac-secret-change-in-production"
     grouping_distance_m: float = 75.0
     duplicate_suggest_radius_m: float = 50.0
     priority_pop_ref: int = 5000
