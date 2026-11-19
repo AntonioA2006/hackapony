@@ -10,6 +10,12 @@ Firebase y la misma API que el sitio web.
 
 APK desde terminal: `./gradlew :androidApp:assembleDebug` → `androidApp/build/outputs/apk/debug/`.
 
+## Versiones
+La versión está en `version.properties` (`versionName` y `versionCode`; el código siempre crece). El workflow
+`.github/workflows/mobile.yml` compila cada cambio y guarda el APK con la versión en el nombre; con el tag
+`mobile-v<versionName>` publica el APK y el framework de iOS en GitHub Releases. La firma de release toma
+`ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD` del entorno.
+
 ## Qué hay en el teléfono y qué queda solo en la web
 | En la app | Solo en la web |
 |---|---|
